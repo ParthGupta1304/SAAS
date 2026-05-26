@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 222 34% 6%;
+  --foreground: 210 40% 98%;
+  --card: 222 28% 9%;
+  --card-foreground: 210 40% 98%;
+  --muted: 222 20% 14%;
+  --muted-foreground: 215 17% 68%;
+  --border: 218 22% 18%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: #080c14;
+}
+
+body {
+  min-height: 100vh;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+h1,
+h2,
+h3 {
+  @apply font-display tracking-normal;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.28);
+}
+
+.section-shell {
+  @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+}
+
+.glass-panel {
+  @apply border border-white/10 bg-white/[0.045] shadow-panel backdrop-blur-xl;
+}
+
+.soft-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.mask-fade {
+  mask-image: linear-gradient(90deg, transparent, black 16%, black 84%, transparent);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
