@@ -19,6 +19,9 @@ if (process.env.NODE_ENV === 'production') {
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     max: 20,
+    ssl: {
+      rejectUnauthorized: false
+    }
   });
   dbInstance = drizzle(pool, { schema });
 } else {
@@ -26,6 +29,9 @@ if (process.env.NODE_ENV === 'production') {
     const pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       max: 5,
+      ssl: {
+        rejectUnauthorized: false
+      }
     });
     global.db = drizzle(pool, { schema });
   }

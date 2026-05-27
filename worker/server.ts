@@ -2,10 +2,10 @@ import express from 'express';
 import cron from 'node-cron';
 import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
-import { eq, and, ne, or, isNull, inArray, sql, desc } from 'drizzle-orm';
+import { eq, and, ne, or, isNull } from 'drizzle-orm';
 
 import { db } from '../lib/db';
-import { sites, checks, checkResults, incidents, reports, organizations } from '../lib/db/schema';
+import { sites, checks, checkResults, incidents, organizations } from '../lib/db/schema';
 import { checkUptime } from '../lib/monitoring/uptime';
 import { checkSSL } from '../lib/monitoring/ssl';
 import { checkDomain } from '../lib/monitoring/domain';
@@ -529,7 +529,7 @@ async function runFormChecks() {
   console.log(`[Scheduler] Found ${activeFormChecks.length} active form checks to queue.`);
 
   for (const item of activeFormChecks) {
-    const config = item.check.config as any;
+    const config = item.check.config as FormCheckConfig;
     if (config?.formUrl) {
       formQueue.push({
         checkId: item.check.id,
