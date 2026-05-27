@@ -58,8 +58,8 @@
 | Auth | **Clerk** | $0 | Already in use, 10K MAU free tier |
 | Database | **Supabase** (Serverless Postgres) + **Drizzle ORM** | $0 | Generous free tier, 500MB DB + 5GB free storage |
 | Hosting (Web) | **Vercel Pro** | $20 | Best Next.js support, edge functions |
-| Hosting (Workers) | **Railway** | $5-10 | Persistent containers for Playwright |
-| Background Jobs | **Trigger.dev** | $0 | 50K free runs/mo, built for Next.js |
+| Hosting (Worker & Scheduler) | **Railway** | $5-10 | Persistent Node.js worker + scheduling + Playwright |
+| Background Jobs | **Railway Scheduler (node-cron)** | $0 | Included in Railway worker, no third-party APIs |
 | Email | **Resend** + React Email | $0 | 3K emails/mo free, component-based templates |
 | Real-time Alerts | **Slack Webhooks** | $0 | Instant agency team notifications |
 | Payments | **Lemon Squeezy** | 5% per txn | Merchant of Record — handles global tax/GST |
@@ -181,16 +181,12 @@
   - Capture screenshot of the result
   - Store screenshot (Supabase Storage or S3) and link to check result
 
-- `[ ]` **2.6 — Scheduling with Trigger.dev**
-  - Set up Trigger.dev project
-  - Define scheduled jobs:
-    - Uptime: every 5 minutes
-    - SSL: daily
-    - Domain: weekly
-    - Tracking pixels: daily
-    - Form tests: every 6 hours (configurable)
-  - Implement retry logic and error handling
-  - Rate limiting per org based on plan tier
+- `[ ]` **2.6 — Scheduling & Concurrency Engine (Railway Worker)**
+  - Set up a persistent Express server with `node-cron`
+  - Implement concurrent batching (e.g., executing checks in batches of 50 sites) to process 1,500+ sites in parallel without thread lag
+  - Implement a queue-limited Playwright scheduler (maximum 2 browsers running concurrently) to prevent CPU spikes and Out-Of-Memory (OOM) crashes
+  - Add retry logic for temporary connection failures
+  - Enforce rate-limits per organization based on plan tier
 
 > **Deliverable:** Fully automated monitoring engine that detects real failures across 5 check types.
 

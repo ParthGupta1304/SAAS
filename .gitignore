@@ -34,4 +34,6 @@ coverage/
 # Local/Agent configurations and temp files
 .antigravitycli/
 .codex/
+.agents/
+skills-lock.json
 
