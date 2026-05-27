@@ -227,7 +227,7 @@ function Header({
           <span className="flex size-9 items-center justify-center rounded-lg border border-emerald-300/20 bg-emerald-300/10 text-emerald-300">
             <ShieldCheck className="size-5" />
           </span>
-          <span className="text-sm font-semibold tracking-normal">Agency Site Guard</span>
+          <span className="text-sm font-semibold tracking-normal">Maintly</span>
         </a>
         <nav className="hidden items-center gap-1 md:flex">
           {navItems.map((item) => (
@@ -466,7 +466,7 @@ function WorkflowSection() {
         <SectionHeader
           eyebrow="Workflow"
           title="A one-page product story built like a Framer launch site."
-          text="The nav anchors scroll to each conversion moment, while the product panels keep showing real Agency Site Guard use cases."
+          text="The nav anchors scroll to each conversion moment, while the product panels keep showing real Maintly use cases."
         />
         <div className="mt-10 grid gap-4 md:grid-cols-4">
           {steps.map(([title, text], index) => (
@@ -935,7 +935,7 @@ function PricingSection({
         <SectionHeader
           eyebrow="Pricing"
           title="Simple plans for care-plan portfolios."
-          text="The pricing copy is customized for Agency Site Guard, replacing generic template language with agency-specific value."
+          text="The pricing copy is customized for Maintly, replacing generic template language with agency-specific value."
         />
         <div className="mx-auto mt-8 flex w-fit rounded-md border border-white/10 bg-white/[0.04] p-1">
           {(["monthly", "yearly"] as const).map((item) => (
@@ -1341,7 +1341,7 @@ function Footer() {
   return (
     <footer className="relative z-10 border-t border-white/10 py-8">
       <div className="section-shell flex flex-col gap-4 text-sm text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
-        <p>Agency Site Guard · UI-only prototype</p>
+        <p>Maintly · UI-only prototype</p>
         <p>Inspired by Framer-style single-page SaaS launches and shadcn dashboard patterns.</p>
       </div>
     </footer>
@@ -1359,7 +1359,7 @@ function ProductMockup() {
             <span className="size-3 rounded-full bg-emerald-300" />
           </div>
           <div className="hidden rounded-full border border-white/10 bg-white/5 px-4 py-1 text-xs text-zinc-400 sm:block">
-            agency-site-guard.app/dashboard
+            maintly.app/dashboard
           </div>
           <ShieldCheck className="size-4 text-cyan-300" />
         </div>

@@ -1,6 +1,6 @@
-# Project Summary: Agency Site Guard
+# Project Summary: Maintly
 
-**Agency Site Guard** is a highly polished, modern Next.js SaaS web application designed specifically for agencies selling website care plans. It helps agencies catch silent website failures (such as form submission errors, expiring SSL certificates, DNS changes, and missing tracking pixels) before their clients do. It also allows agencies to easily generate monthly "proof-of-work" reports to justify retainer costs.
+**Maintly** is a highly polished, modern Next.js SaaS web application designed specifically for agencies selling website care plans. It helps agencies catch silent website failures (such as form submission errors, expiring SSL certificates, DNS changes, and missing tracking pixels) before their clients do. It also allows agencies to easily generate monthly "proof-of-work" reports to justify retainer costs.
 
 ---
 
@@ -21,7 +21,7 @@ The project is built using modern React and Next.js features, focusing on visual
 ## 📁 File Structure and Architecture
 
 ```
-agency-site-guard/
+maintly/
 ├── app/                        # Next.js App Router root
 │   ├── dashboard/              # Protected agency operations dashboard
 │   │   └── page.tsx            # Main operational view with stats, feeds, and team views

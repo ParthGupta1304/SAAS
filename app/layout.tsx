@@ -7,7 +7,7 @@ import "./globals.css";
 import { isClerkFrontendReady } from "@/lib/clerk";
 
 export const metadata: Metadata = {
-  title: "Agency Site Guard",
+  title: "Maintly",
   description:
     "Catch silent website failures before your clients do with automated monitoring and proof-of-work reports.",
 };

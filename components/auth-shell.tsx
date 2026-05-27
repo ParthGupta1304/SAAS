@@ -30,7 +30,7 @@ export function AuthShell({
               <ShieldCheck className="size-5" />
             </span>
             <span className="text-sm font-semibold tracking-normal">
-              Agency Site Guard
+              Maintly
             </span>
           </Link>
           <Link
