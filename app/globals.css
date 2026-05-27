@@ -62,3 +62,102 @@ h3 {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ───────────────────────────────────────────────
+   Perspective container for 3D scroll tilt
+   ─────────────────────────────────────────────── */
+.perspective-container {
+  perspective: 1200px;
+  perspective-origin: 50% 50%;
+}
+
+/* ───────────────────────────────────────────────
+   Spotlight card — cursor-tracking radial glow
+   ─────────────────────────────────────────────── */
+.spotlight-card {
+  --mouse-x: 50%;
+  --mouse-y: 50%;
+  position: relative;
+  overflow: hidden;
+}
+
+.spotlight-card::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  opacity: 0;
+  background: radial-gradient(
+    680px circle at var(--mouse-x) var(--mouse-y),
+    rgba(34, 211, 238, 0.08),
+    transparent 40%
+  );
+  transition: opacity 0.4s ease;
+}
+
+.spotlight-card:hover::before {
+  opacity: 1;
+}
+
+/* Spotlight border glow overlay */
+.spotlight-card::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  opacity: 0;
+  background: radial-gradient(
+    400px circle at var(--mouse-x) var(--mouse-y),
+    rgba(34, 211, 238, 0.14),
+    transparent 40%
+  );
+  mask-image: linear-gradient(black, black) content-box,
+              linear-gradient(black, black);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  padding: 1px;
+  transition: opacity 0.4s ease;
+}
+
+.spotlight-card:hover::after {
+  opacity: 1;
+}
+
+/* ───────────────────────────────────────────────
+   Border beam — animated perimeter glow
+   ─────────────────────────────────────────────── */
+@property --border-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.border-beam {
+  position: relative;
+}
+
+.border-beam::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--border-angle),
+    transparent 60%,
+    rgba(34, 211, 238, 0.5) 80%,
+    rgba(16, 185, 129, 0.4) 90%,
+    transparent 100%
+  );
+  animation: border-spin 4s linear infinite;
+}
+
+@keyframes border-spin {
+  to {
+    --border-angle: 360deg;
+  }
+}

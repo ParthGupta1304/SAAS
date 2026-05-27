@@ -1,5 +1,18 @@
 "use client";
 
+/**
+ * Maintly Landing Page & Client Portal Mockup.
+ * Implements a high-fidelity, interactive product story using Framer Motion and Recharts:
+ * 
+ * UI/UX Motion Upgrades:
+ * - Word-by-word text slide in header (StaggerText) using spring physics.
+ * - 3D scroll perspective on the main product mockup (rotateX, scale, and opacity maps linked to page scroll progress).
+ * - Spotlight hover effects (HoverPanel) calculating cursor coordinates as CSS variables for radial gradient glow.
+ * - Dynamic billing frequency toggle (monthly vs. yearly with 20% discount layout transitions).
+ * - Animated FAQ accordions using Framer Motion AnimatePresence and height interpolation.
+ * - Mobile responsive navigation menu slide and fade triggers.
+ */
+
 import Link from "next/link";
 import {
   OrganizationSwitcher,
@@ -31,7 +44,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AnimatePresence, motion, useScroll, useTransform } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -149,10 +162,66 @@ const statusData = [
 ];
 
 const plans = [
-  { name: "Starter", price: "$19", sites: "10 sites", description: "For freelancers managing a handful of retainers." },
-  { name: "Growth", price: "$49", sites: "50 sites", description: "For agencies proving monthly care-plan value.", popular: true },
-  { name: "Agency", price: "$99", sites: "150 sites", description: "For teams with branded reports and active alerts." },
-  { name: "Scale", price: "$199", sites: "400 sites", description: "For white-label maintenance providers." }
+  { 
+    name: "Starter", 
+    price: "$19", 
+    sites: "10 sites", 
+    description: "For freelancers starting out with a few retainers.",
+    features: [
+      "10 sites monitoring",
+      "Uptime + SSL + domain checks",
+      "In-app & Slack alerts",
+      "PDF client reports",
+      "Add-on: White-label (+$15/mo)",
+      "Add-on: Form Testing (+$10/mo)"
+    ]
+  },
+  { 
+    name: "Growth", 
+    price: "$49", 
+    sites: "50 sites", 
+    description: "For growing agencies proving monthly value.", 
+    popular: true,
+    features: [
+      "50 sites monitoring",
+      "Uptime + SSL + domain checks",
+      "In-app & Slack alerts",
+      "PDF client reports",
+      "Form Testing (on 5 sites)",
+      "Add-on: White-label (+$15/mo)"
+    ]
+  },
+  { 
+    name: "Agency", 
+    price: "$99", 
+    sites: "150 sites", 
+    description: "For established teams wanting full automation.",
+    features: [
+      "150 sites monitoring",
+      "Uptime + SSL + domain checks",
+      "In-app & Slack alerts",
+      "PDF client reports",
+      "Form Testing (all sites)",
+      "White-labeling included",
+      "SMS alerts add-on available"
+    ]
+  },
+  { 
+    name: "Scale", 
+    price: "$250", 
+    sites: "400 sites", 
+    description: "For large white-label maintenance operations.",
+    features: [
+      "400 sites monitoring",
+      "Uptime + SSL + domain checks",
+      "In-app & Slack alerts",
+      "PDF client reports",
+      "Form Testing (all sites)",
+      "White-labeling included",
+      "SMS alerts included",
+      "Priority 24/7 support"
+    ]
+  }
 ];
 
 const sections: Variants = {
@@ -277,7 +346,47 @@ function Header({
   );
 }
 
+function StaggerText({ text, className, delay = 0 }: { text: string; className?: string; delay?: number }) {
+  const words = text.split(" ");
+  const container = {
+    hidden: {},
+    visible: { transition: { staggerChildren: 0.06, delayChildren: delay } }
+  };
+  const child = {
+    hidden: { opacity: 0, y: 20, filter: "blur(6px)" },
+    visible: {
+      opacity: 1,
+      y: 0,
+      filter: "blur(0px)",
+      transition: { type: "spring" as const, damping: 18, stiffness: 200 }
+    }
+  };
+  return (
+    <motion.span
+      variants={container}
+      initial="hidden"
+      animate="visible"
+      className={cn("inline-flex flex-wrap justify-center gap-x-[0.3em] gap-y-1", className)}
+    >
+      {words.map((word, i) => (
+        <motion.span key={`${word}-${i}`} variants={child} className="inline-block">
+          {word}
+        </motion.span>
+      ))}
+    </motion.span>
+  );
+}
+
 function Hero({ clerkEnabled, heroY }: { clerkEnabled: boolean; heroY: MotionValue<number> }) {
+  const mockupRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress: mockupProgress } = useScroll({
+    target: mockupRef,
+    offset: ["start end", "end start"]
+  });
+  const rotateX = useTransform(mockupProgress, [0, 0.45], [12, 0]);
+  const mockupScale = useTransform(mockupProgress, [0, 0.45], [0.92, 1]);
+  const mockupOpacity = useTransform(mockupProgress, [0, 0.25], [0.5, 1]);
+
   return (
     <section id="top" className="relative z-10 pt-28 sm:pt-32">
       <div className="section-shell">
@@ -291,18 +400,13 @@ function Hero({ clerkEnabled, heroY }: { clerkEnabled: boolean; heroY: MotionVal
             <Sparkles className="size-4 text-cyan-300" />
             Built for agencies selling website care plans
           </motion.div>
-          <motion.h1
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.68, delay: 0.05 }}
-            className="text-balance text-5xl font-semibold leading-[1.02] tracking-normal text-white sm:text-6xl lg:text-7xl"
-          >
-            Catch silent website failures before your clients do.
-          </motion.h1>
+          <h1 className="text-balance text-5xl font-semibold leading-[1.02] tracking-normal text-white sm:text-6xl lg:text-7xl">
+            <StaggerText text="Catch silent website failures before your clients do." delay={0.1} />
+          </h1>
           <motion.p
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.68, delay: 0.12 }}
+            transition={{ duration: 0.68, delay: 0.6 }}
             className="mx-auto mt-6 max-w-2xl text-pretty text-lg leading-8 text-zinc-300"
           >
             Uptime, SSL, domain, form, tracking, and client-ready maintenance reports for agencies
@@ -311,15 +415,20 @@ function Hero({ clerkEnabled, heroY }: { clerkEnabled: boolean; heroY: MotionVal
           <motion.div
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.68, delay: 0.18 }}
+            transition={{ duration: 0.68, delay: 0.75 }}
             className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row"
           >
             <HeroActions clerkEnabled={clerkEnabled} />
           </motion.div>
         </div>
-        <motion.div style={{ y: heroY }} className="mx-auto mt-14 max-w-6xl">
-          <ProductMockup />
-        </motion.div>
+        <div ref={mockupRef} className="perspective-container mx-auto mt-14 max-w-6xl">
+          <motion.div
+            style={{ rotateX, scale: mockupScale, opacity: mockupOpacity, y: heroY }}
+            className="will-change-transform"
+          >
+            <ProductMockup />
+          </motion.div>
+        </div>
       </div>
     </section>
   );
@@ -799,11 +908,18 @@ function SettingsMock({
               key={item}
               onClick={() => setBilling(item)}
               className={cn(
-                "rounded px-3 py-1.5 text-xs capitalize transition",
-                billing === item ? "bg-cyan-300 text-zinc-950" : "text-zinc-400"
+                "relative rounded px-3 py-1.5 text-xs capitalize transition-colors",
+                billing === item ? "text-zinc-950" : "text-zinc-400 hover:text-zinc-200"
               )}
             >
-              {item}
+              {billing === item && (
+                <motion.div
+                  layoutId="settings-pill"
+                  className="absolute inset-0 rounded bg-cyan-300"
+                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                />
+              )}
+              <span className="relative z-10">{item}</span>
             </button>
           ))}
         </div>
@@ -935,16 +1051,23 @@ function PricingSection({
         <SectionHeader
           eyebrow="Pricing"
           title="Simple plans for care-plan portfolios."
-          text="The pricing copy is customized for Maintly, replacing generic template language with agency-specific value."
+          text="Start your 14-day free trial (up to 3 sites) per organization. No credit card required. Upgrade anytime."
         />
         <div className="mx-auto mt-8 flex w-fit rounded-md border border-white/10 bg-white/[0.04] p-1">
           {(["monthly", "yearly"] as const).map((item) => (
             <button
               key={item}
               onClick={() => setBilling(item)}
-              className={cn("rounded px-4 py-2 text-sm capitalize", billing === item ? "bg-white text-zinc-950" : "text-zinc-400")}
+              className={cn("relative rounded px-4 py-2 text-sm capitalize transition-colors", billing === item ? "text-zinc-950" : "text-zinc-400 hover:text-zinc-200")}
             >
-              {item}
+              {billing === item && (
+                <motion.div
+                  layoutId="pricing-pill"
+                  className="absolute inset-0 rounded bg-white"
+                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                />
+              )}
+              <span className="relative z-10">{item}</span>
             </button>
           ))}
         </div>
@@ -954,25 +1077,27 @@ function PricingSection({
               key={plan.name}
               whileHover={{ y: -8 }}
               className={cn(
-                "rounded-lg border p-5",
+                "rounded-lg border p-5 flex flex-col justify-between",
                 plan.popular ? "border-cyan-300/40 bg-cyan-300/10 shadow-glow" : "border-white/10 bg-white/[0.045]"
               )}
             >
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">{plan.name}</h3>
-                {plan.popular && <StatusBadge tone="cyan">Popular</StatusBadge>}
+              <div>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">{plan.name}</h3>
+                  {plan.popular && <StatusBadge tone="cyan">Popular</StatusBadge>}
+                </div>
+                <p className="mt-5 text-4xl font-semibold">{plan.displayPrice}</p>
+                <p className="mt-1 text-sm text-zinc-500">/ month · {plan.sites}</p>
+                <p className="mt-5 min-h-12 text-sm leading-6 text-zinc-400">{plan.description}</p>
+                <button className={cn("mt-6 w-full rounded-md px-4 py-2 text-sm font-semibold", plan.popular ? "bg-cyan-300 text-zinc-950" : "bg-white text-zinc-950")}>
+                  Join waitlist
+                </button>
               </div>
-              <p className="mt-5 text-4xl font-semibold">{plan.displayPrice}</p>
-              <p className="mt-1 text-sm text-zinc-500">/ month · {plan.sites}</p>
-              <p className="mt-5 min-h-12 text-sm leading-6 text-zinc-400">{plan.description}</p>
-              <button className={cn("mt-6 w-full rounded-md px-4 py-2 text-sm font-semibold", plan.popular ? "bg-cyan-300 text-zinc-950" : "bg-white text-zinc-950")}>
-                Join waitlist
-              </button>
-              <div className="mt-5 grid gap-2 text-sm text-zinc-300">
-                {["Uptime + SSL + domain checks", "Branded monthly reports", "Form monitor evidence"].map((feature) => (
-                  <span key={feature} className="flex items-center gap-2">
-                    <CheckCircle2 className="size-4 text-emerald-300" />
-                    {feature}
+              <div className="mt-8 border-t border-white/5 pt-5 grid gap-2 text-sm text-zinc-300">
+                {plan.features.map((feature) => (
+                  <span key={feature} className="flex items-start gap-2">
+                    <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-300" />
+                    <span className="leading-tight">{feature}</span>
                   </span>
                 ))}
               </div>
@@ -1006,24 +1131,32 @@ function FAQSection() {
           <SectionHeader eyebrow="FAQ" title="Clear defaults before the build turns functional." text="A compact set of implementation notes for the next agent or Framer build." />
           <div className="mt-10 grid gap-3">
             {faqs.map(([question, answer], index) => (
-              <div key={question} className="rounded-lg border border-white/10 bg-white/[0.045]">
+              <div key={question} className="spotlight-card rounded-lg border border-white/10 bg-white/[0.045]">
                 <button
                   onClick={() => setOpen(open === index ? -1 : index)}
                   className="flex w-full items-center justify-between gap-4 p-4 text-left"
                 >
                   <span className="font-medium">{question}</span>
-                  <ChevronDown className={cn("size-4 transition", open === index && "rotate-180")} />
+                  <motion.div
+                    animate={{ rotate: open === index ? 180 : 0 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                  >
+                    <ChevronDown className="size-4" />
+                  </motion.div>
                 </button>
-                <AnimatePresence>
+                <AnimatePresence initial={false}>
                   {open === index && (
-                    <motion.p
+                    <motion.div
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: "auto", opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden px-4 pb-4 text-sm leading-6 text-zinc-400"
+                      transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+                      className="overflow-hidden"
                     >
-                      {answer}
-                    </motion.p>
+                      <p className="px-4 pb-4 text-sm leading-6 text-zinc-400">
+                        {answer}
+                      </p>
+                    </motion.div>
                   )}
                 </AnimatePresence>
               </div>
@@ -1350,7 +1483,7 @@ function Footer() {
 
 function ProductMockup() {
   return (
-    <div className="relative rounded-lg border border-white/10 bg-[#0a0f19] p-2 shadow-2xl shadow-cyan-950/30">
+    <div className="border-beam relative rounded-lg border border-white/10 bg-[#0a0f19] p-2 shadow-2xl shadow-cyan-950/30">
       <div className="rounded-md border border-white/10 bg-zinc-950/80">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div className="flex items-center gap-2">
@@ -1440,8 +1573,20 @@ function SectionHeader({
 }
 
 function HoverPanel({ children, className }: { children: React.ReactNode; className?: string }) {
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const { currentTarget, clientX, clientY } = e;
+    const { left, top } = currentTarget.getBoundingClientRect();
+    currentTarget.style.setProperty("--mouse-x", `${clientX - left}px`);
+    currentTarget.style.setProperty("--mouse-y", `${clientY - top}px`);
+  }, []);
+
   return (
-    <motion.div whileHover={{ y: -5 }} transition={{ duration: 0.2 }} className={cn("glass-panel rounded-lg", className)}>
+    <motion.div
+      whileHover={{ y: -5 }}
+      transition={{ duration: 0.25 }}
+      onMouseMove={handleMouseMove}
+      className={cn("spotlight-card glass-panel rounded-lg", className)}
+    >
       {children}
     </motion.div>
   );
