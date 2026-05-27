@@ -245,7 +245,13 @@
   - Example output: *"This month, your website maintained 99.97% uptime. Our team detected and resolved a contact form issue within 2 hours, and your SSL certificate was renewed 14 days before expiry."*
   - Allow manual editing before sending
 
-- `[ ]` **4.3 — PDF report generation**
+- `[ ]` **4.3 — AI Playwright Form Auditor**
+  - Integrate Gemini 2.0 Flash into the background worker queue (`worker/server.ts`)
+  - Auto-discovery for contact fields: AI scans HTML forms, automatically resolves CSS selectors for key fields (Name, Email, Message) and submits them without manual selector mapping
+  - AI Success Verification: AI analyzes the resulting DOM text to confirm confirmation state or log specific validation errors
+  - Captcha/error logging hooks and screenshot uploads to Supabase Storage
+
+- `[ ]` **4.4 — PDF report generation**
   - Build report layout with React-PDF:
     - Agency logo + branding colors (configurable)
     - Executive summary (AI-generated)
@@ -255,14 +261,14 @@
     - Next month recommendations
   - Generate and store PDF (S3/Supabase Storage)
 
-- `[ ]` **4.4 — Report workflow**
+- `[ ]` **4.5 — Report workflow**
   - Auto-generate draft reports on the 1st of each month
   - Dashboard view: reports queue with Draft → Approved → Sent status
   - "Preview" button opens the rendered PDF
   - "Approve & Send" delivers the report via email to the client contact
   - Track opens (via Resend webhooks)
 
-- `[ ]` **4.5 — Brand customizer**
+- `[ ]` **4.6 — Brand customizer**
   - Upload agency logo
   - Choose primary HSL color
   - Custom footer text
