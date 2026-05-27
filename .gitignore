@@ -30,3 +30,8 @@ coverage/
 .DS_Store
 .idea/
 .vscode/
+
+# Local/Agent configurations and temp files
+.antigravitycli/
+.codex/
+

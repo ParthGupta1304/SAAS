@@ -1,5 +1,12 @@
 "use client";
 
+import Link from "next/link";
+import {
+  OrganizationSwitcher,
+  Show,
+  UserButton,
+  useAuth
+} from "@clerk/nextjs";
 import {
   Activity,
   AlertTriangle,
@@ -182,8 +189,15 @@ export default function Home() {
         className="pointer-events-none fixed inset-x-0 top-0 z-0 h-[520px] bg-[radial-gradient(circle_at_50%_10%,rgba(34,211,238,0.28),transparent_48%),radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.16),transparent_34%)]"
       />
       <div className="pointer-events-none fixed inset-0 z-0 soft-grid opacity-60" />
-      <Header menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
-      <Hero heroY={heroY} />
+      <Header
+        clerkEnabled={Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)}
+        menuOpen={menuOpen}
+        setMenuOpen={setMenuOpen}
+      />
+      <Hero
+        clerkEnabled={Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)}
+        heroY={heroY}
+      />
       <LogoStrip />
       <ProductSection />
       <WorkflowSection />
@@ -191,16 +205,18 @@ export default function Home() {
       <ReportsSection />
       <PricingSection billing={billing} setBilling={setBilling} discountedPlans={discountedPlans} />
       <FAQSection />
-      <CTASection />
+      <CTASection clerkEnabled={Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)} />
       <Footer />
     </main>
   );
 }
 
 function Header({
+  clerkEnabled,
   menuOpen,
   setMenuOpen
 }: {
+  clerkEnabled: boolean;
   menuOpen: boolean;
   setMenuOpen: (value: boolean) => void;
 }) {
@@ -224,17 +240,7 @@ function Header({
             </a>
           ))}
         </nav>
-        <div className="hidden items-center gap-3 md:flex">
-          <a href="#dashboard" className="text-sm text-zinc-300 transition hover:text-white">
-            Preview
-          </a>
-          <a
-            href="#pricing"
-            className="rounded-md bg-cyan-300 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200"
-          >
-            Start waitlist
-          </a>
-        </div>
+        <DesktopHeaderActions clerkEnabled={clerkEnabled} />
         <button
           className="flex size-10 items-center justify-center rounded-md border border-white/10 bg-white/5 md:hidden"
           onClick={() => setMenuOpen(!menuOpen)}
@@ -262,6 +268,7 @@ function Header({
                   {item.label}
                 </a>
               ))}
+              <MobileHeaderActions clerkEnabled={clerkEnabled} onNavigate={() => setMenuOpen(false)} />
             </nav>
           </motion.div>
         )}
@@ -270,7 +277,7 @@ function Header({
   );
 }
 
-function Hero({ heroY }: { heroY: MotionValue<number> }) {
+function Hero({ clerkEnabled, heroY }: { clerkEnabled: boolean; heroY: MotionValue<number> }) {
   return (
     <section id="top" className="relative z-10 pt-28 sm:pt-32">
       <div className="section-shell">
@@ -307,20 +314,7 @@ function Hero({ heroY }: { heroY: MotionValue<number> }) {
             transition={{ duration: 0.68, delay: 0.18 }}
             className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row"
           >
-            <a
-              href="#dashboard"
-              className="group flex w-full items-center justify-center gap-2 rounded-md bg-cyan-300 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200 sm:w-auto"
-            >
-              Explore the prototype
-              <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
-            </a>
-            <a
-              href="#reports"
-              className="flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-white/6 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 sm:w-auto"
-            >
-              <Play className="size-4" />
-              View report flow
-            </a>
+            <HeroActions clerkEnabled={clerkEnabled} />
           </motion.div>
         </div>
         <motion.div style={{ y: heroY }} className="mx-auto mt-14 max-w-6xl">
@@ -1041,7 +1035,7 @@ function FAQSection() {
   );
 }
 
-function CTASection() {
+function CTASection({ clerkEnabled }: { clerkEnabled: boolean }) {
   return (
     <section className="relative z-10 pb-20 pt-8">
       <div className="section-shell">
@@ -1054,16 +1048,292 @@ function CTASection() {
             Use this one-page prototype as the base for Framer, Codex, or v0, then wire the real monitoring engine after the design lands.
           </p>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-            <a href="#dashboard" className="rounded-md bg-cyan-300 px-5 py-3 text-sm font-semibold text-zinc-950">
-              Revisit dashboard
-            </a>
-            <a href="#product" className="rounded-md border border-white/10 bg-white/6 px-5 py-3 text-sm font-semibold text-white">
-              See product story
-            </a>
+            <CTAButtons clerkEnabled={clerkEnabled} />
           </div>
         </div>
       </div>
     </section>
+  );
+}
+
+function DesktopHeaderActions({ clerkEnabled }: { clerkEnabled: boolean }) {
+  if (!clerkEnabled) {
+    return (
+      <div className="hidden items-center gap-3 md:flex">
+        <Link href="/sign-in" className="text-sm text-zinc-300 transition hover:text-white">
+          Sign in
+        </Link>
+        <Link
+          href="/sign-up"
+          className="rounded-md bg-cyan-300 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200"
+        >
+          Create account
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="hidden items-center gap-3 md:flex">
+      <Show when="signed-in" fallback={<SignedOutHeaderActions />}>
+        <SignedInHeaderActions />
+      </Show>
+    </div>
+  );
+}
+
+function MobileHeaderActions({
+  clerkEnabled,
+  onNavigate
+}: {
+  clerkEnabled: boolean;
+  onNavigate: () => void;
+}) {
+  if (!clerkEnabled) {
+    return (
+      <>
+        <Link
+          href="/sign-in"
+          className="rounded-md px-3 py-3 text-sm text-zinc-300 transition hover:bg-white/8 hover:text-white"
+          onClick={onNavigate}
+        >
+          Sign in
+        </Link>
+        <Link
+          href="/sign-up"
+          className="rounded-md bg-cyan-300 px-3 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200"
+          onClick={onNavigate}
+        >
+          Create account
+        </Link>
+      </>
+    );
+  }
+
+  return (
+    <Show when="signed-in" fallback={<SignedOutMobileActions onNavigate={onNavigate} />}>
+      <SignedInMobileActions onNavigate={onNavigate} />
+    </Show>
+  );
+}
+
+function SignedOutHeaderActions() {
+  return (
+    <>
+      <Link href="/sign-in" className="text-sm text-zinc-300 transition hover:text-white">
+        Sign in
+      </Link>
+      <Link
+        href="/sign-up"
+        className="rounded-md bg-cyan-300 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200"
+      >
+        Create account
+      </Link>
+    </>
+  );
+}
+
+function SignedInHeaderActions() {
+  const { orgId } = useAuth();
+  const primaryHref = orgId ? "/dashboard" : "/onboarding";
+  const primaryLabel = orgId ? "Open dashboard" : "Set up agency";
+
+  return (
+    <>
+      <Link href={primaryHref} prefetch={false} className="text-sm text-zinc-300 transition hover:text-white">
+        {primaryLabel}
+      </Link>
+      <OrganizationSwitcher
+        afterCreateOrganizationUrl="/dashboard"
+        afterSelectOrganizationUrl="/dashboard"
+        createOrganizationMode="modal"
+        organizationProfileMode="modal"
+        appearance={{
+          elements: {
+            organizationSwitcherTrigger: "!text-white",
+            organizationSwitcherTriggerIcon: "!text-white"
+          }
+        }}
+      />
+      <UserButton
+        showName
+        appearance={{
+          elements: {
+            userButtonOuterIdentifier: "!text-white",
+            userButtonTrigger: "!text-white"
+          }
+        }}
+      />
+    </>
+  );
+}
+
+function SignedOutMobileActions({ onNavigate }: { onNavigate: () => void }) {
+  return (
+    <>
+      <Link
+        href="/sign-in"
+        className="rounded-md px-3 py-3 text-sm text-zinc-300 transition hover:bg-white/8 hover:text-white"
+        onClick={onNavigate}
+      >
+        Sign in
+      </Link>
+      <Link
+        href="/sign-up"
+        className="rounded-md bg-cyan-300 px-3 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200"
+        onClick={onNavigate}
+      >
+        Create account
+      </Link>
+    </>
+  );
+}
+
+function SignedInMobileActions({ onNavigate }: { onNavigate: () => void }) {
+  const { orgId } = useAuth();
+  const primaryHref = orgId ? "/dashboard" : "/onboarding";
+  const primaryLabel = orgId ? "Open dashboard" : "Set up agency";
+
+  return (
+    <Link
+      href={primaryHref}
+      prefetch={false}
+      className="rounded-md bg-cyan-300 px-3 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200"
+      onClick={onNavigate}
+    >
+      {primaryLabel}
+    </Link>
+  );
+}
+
+function HeroActions({ clerkEnabled }: { clerkEnabled: boolean }) {
+  if (!clerkEnabled) {
+    return (
+      <>
+        <Link
+          href="/sign-up"
+          className="group flex w-full items-center justify-center gap-2 rounded-md bg-cyan-300 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200 sm:w-auto"
+        >
+          Create your agency account
+          <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
+        </Link>
+        <a
+          href="#reports"
+          className="flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-white/6 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 sm:w-auto"
+        >
+          <Play className="size-4" />
+          View report flow
+        </a>
+      </>
+    );
+  }
+
+  return (
+    <Show when="signed-in" fallback={<SignedOutHeroActions />}>
+      <SignedInHeroActions />
+    </Show>
+  );
+}
+
+function SignedOutHeroActions() {
+  return (
+    <>
+      <Link
+        href="/sign-up"
+        className="group flex w-full items-center justify-center gap-2 rounded-md bg-cyan-300 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200 sm:w-auto"
+      >
+        Create your agency account
+        <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
+      </Link>
+      <a
+        href="#reports"
+        className="flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-white/6 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 sm:w-auto"
+      >
+        <Play className="size-4" />
+        View report flow
+      </a>
+    </>
+  );
+}
+
+function SignedInHeroActions() {
+  const { orgId } = useAuth();
+  const href = orgId ? "/dashboard" : "/onboarding";
+  const label = orgId ? "Open your dashboard" : "Create your agency workspace";
+
+  return (
+    <>
+      <Link
+        href={href}
+        prefetch={false}
+        className="group flex w-full items-center justify-center gap-2 rounded-md bg-cyan-300 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-200 sm:w-auto"
+      >
+        {label}
+        <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
+      </Link>
+      <a
+        href="#reports"
+        className="flex w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-white/6 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 sm:w-auto"
+      >
+        <Play className="size-4" />
+        View report flow
+      </a>
+    </>
+  );
+}
+
+function CTAButtons({ clerkEnabled }: { clerkEnabled: boolean }) {
+  if (!clerkEnabled) {
+    return (
+      <>
+        <Link href="/sign-up" className="rounded-md bg-cyan-300 px-5 py-3 text-sm font-semibold text-zinc-950">
+          Start with Clerk auth
+        </Link>
+        <a href="#product" className="rounded-md border border-white/10 bg-white/6 px-5 py-3 text-sm font-semibold text-white">
+          See product story
+        </a>
+      </>
+    );
+  }
+
+  return (
+    <Show when="signed-in" fallback={<SignedOutCTAButtons />}>
+      <SignedInCTAButtons />
+    </Show>
+  );
+}
+
+function SignedOutCTAButtons() {
+  return (
+    <>
+      <Link href="/sign-up" className="rounded-md bg-cyan-300 px-5 py-3 text-sm font-semibold text-zinc-950">
+        Start with Clerk auth
+      </Link>
+      <a href="#product" className="rounded-md border border-white/10 bg-white/6 px-5 py-3 text-sm font-semibold text-white">
+        See product story
+      </a>
+    </>
+  );
+}
+
+function SignedInCTAButtons() {
+  const { orgId } = useAuth();
+  const href = orgId ? "/dashboard" : "/onboarding";
+  const label = orgId ? "Go to dashboard" : "Finish agency setup";
+
+  return (
+    <>
+      <Link
+        href={href}
+        prefetch={false}
+        className="rounded-md bg-cyan-300 px-5 py-3 text-sm font-semibold text-zinc-950"
+      >
+        {label}
+      </Link>
+      <a href="#product" className="rounded-md border border-white/10 bg-white/6 px-5 py-3 text-sm font-semibold text-white">
+        See product story
+      </a>
+    </>
   );
 }
 
