@@ -19,6 +19,7 @@ import { sites, checkResults, incidents, reports } from '@/lib/db/schema';
 import { AddSiteDialog } from '@/components/add-site-dialog';
 import { ClerkSetupCard } from '@/components/clerk-setup-card';
 import { isClerkConfigured } from '@/lib/clerk';
+import { NotificationBell } from '@/components/notification-bell';
 
 // Inline CN utility
 function cn(...classes: Array<string | false | undefined>) {
@@ -127,6 +128,31 @@ export default async function DashboardPage() {
     }
   }
 
+  // Calculate per-site real uptime % from last 30 days of uptime check results
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const siteUptimeMap = new Map<string, string>();
+  for (const site of orgSites) {
+    const uptimeCheck = site.checks.find((c) => c.type === 'uptime');
+    if (!uptimeCheck) {
+      siteUptimeMap.set(site.id, 'N/A');
+      continue;
+    }
+    const uptimeResults = await db.query.checkResults.findMany({
+      where: and(
+        eq(checkResults.checkId, uptimeCheck.id),
+        sql`${checkResults.createdAt} >= ${thirtyDaysAgo}`
+      ),
+    });
+    if (uptimeResults.length === 0) {
+      siteUptimeMap.set(site.id, '—');
+    } else {
+      const passing = uptimeResults.filter((r) => r.status === 'passing').length;
+      siteUptimeMap.set(site.id, `${((passing / uptimeResults.length) * 100).toFixed(2)}%`);
+    }
+  }
+
   // Calculate reports due (draft status for current month)
   const currentMonth = new Date().getMonth() + 1;
   const currentYear = new Date().getFullYear();
@@ -229,6 +255,7 @@ export default async function DashboardPage() {
                 },
               }}
             />
+            <NotificationBell />
             <UserButton
               showName
               appearance={{
@@ -239,6 +266,14 @@ export default async function DashboardPage() {
               }}
             />
           </div>
+        </div>
+      </div>
+
+      <div className="border-b border-white/5 bg-[#070b12]/50">
+        <div className="section-shell flex gap-6">
+          <a href="/dashboard" className="border-b-2 border-cyan-400 py-3 text-sm font-medium text-white">Portfolio</a>
+          <a href="/dashboard/reports" className="border-b-2 border-transparent py-3 text-sm font-medium text-zinc-400 hover:text-white">Reports</a>
+          <a href="/dashboard/settings/branding" className="border-b-2 border-transparent py-3 text-sm font-medium text-zinc-400 hover:text-white">Branding</a>
         </div>
       </div>
 
@@ -315,7 +350,7 @@ export default async function DashboardPage() {
                             <StatusBadge tone={tone}>{statusText}</StatusBadge>
                           </td>
                           <td className="py-4 text-zinc-300">
-                            {siteIncident ? '99.8%' : '100%'}
+                            {siteUptimeMap.get(site.id) ?? '—'}
                           </td>
                           <td className="py-4 text-xs text-zinc-400">
                             <div className="flex gap-2">

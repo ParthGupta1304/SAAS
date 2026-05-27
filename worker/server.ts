@@ -2,7 +2,7 @@ import express from 'express';
 import cron from 'node-cron';
 import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
-import { eq, and, ne, or, isNull } from 'drizzle-orm';
+import { eq, and, ne, or, isNull, sql } from 'drizzle-orm';
 
 import { db } from '../lib/db';
 import { sites, checks, checkResults, incidents, organizations } from '../lib/db/schema';
@@ -10,6 +10,8 @@ import { checkUptime } from '../lib/monitoring/uptime';
 import { checkSSL } from '../lib/monitoring/ssl';
 import { checkDomain } from '../lib/monitoring/domain';
 import { checkPixels } from '../lib/monitoring/pixels';
+import { triggerAlertForIncident } from '../lib/alerts/alert-router';
+import { analyzeFormHtml } from '../lib/ai/gemini';
 
 // Load Env variables in case process isn't running via next dev
 import dotenv from 'dotenv';
@@ -39,6 +41,27 @@ async function processInBatches<T>(items: T[], batchSize: number, workerFn: (ite
     const batch = items.slice(i, i + batchSize);
     await Promise.all(batch.map((item) => workerFn(item)));
   }
+}
+
+/**
+ * Finds the first open (unresolved) incident scoped to a specific check ID.
+ * Prevents cross-check-type collisions (e.g. an SSL warning should not block
+ * a new uptime critical incident from being created).
+ */
+async function findOpenIncidentForCheck(siteId: string, checkId: string) {
+  const rows = await db
+    .select({ id: incidents.id })
+    .from(incidents)
+    .innerJoin(checkResults, eq(incidents.checkResultId, checkResults.id))
+    .where(
+      and(
+        eq(incidents.siteId, siteId),
+        isNull(incidents.resolvedAt),
+        eq(checkResults.checkId, checkId)
+      )
+    )
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 /**
@@ -117,24 +140,30 @@ async function runUptimeChecks() {
         })
         .returning();
 
+      // Update lastCheckedAt timestamp
+      await db.update(checks).set({ lastCheckedAt: new Date() }).where(eq(checks.id, check.id));
+
       if (!result.success) {
-        const existingIncident = await db.query.incidents.findFirst({
-          where: and(eq(incidents.siteId, site.id), isNull(incidents.resolvedAt)),
-        });
+        // Scope incident lookup to this specific uptime check to avoid cross-type collisions
+        const existingIncident = await findOpenIncidentForCheck(site.id, check.id);
 
         if (!existingIncident) {
-          await db.insert(incidents).values({
-            siteId: site.id,
-            checkResultId: newResult.id,
-            severity: 'critical',
-            issue: result.errorMsg || 'Website is down',
-          });
+          const [newIncident] = await db
+            .insert(incidents)
+            .values({
+              siteId: site.id,
+              checkResultId: newResult.id,
+              severity: 'critical',
+              issue: result.errorMsg || 'Website is down',
+            })
+            .returning();
           console.log(`[Alert] Incident created for ${site.name}: ${result.errorMsg}`);
+          if (newIncident) {
+            triggerAlertForIncident(newIncident.id, 'created').catch(err => console.error(err));
+          }
         }
       } else {
-        const openIncident = await db.query.incidents.findFirst({
-          where: and(eq(incidents.siteId, site.id), isNull(incidents.resolvedAt)),
-        });
+        const openIncident = await findOpenIncidentForCheck(site.id, check.id);
 
         if (openIncident) {
           await db
@@ -142,6 +171,7 @@ async function runUptimeChecks() {
             .set({ resolvedAt: new Date() })
             .where(eq(incidents.id, openIncident.id));
           console.log(`[Alert] Incident resolved for ${site.name}`);
+          triggerAlertForIncident(openIncident.id, 'resolved').catch(err => console.error(err));
         }
       }
     } catch (err) {
@@ -181,28 +211,34 @@ async function runDailyChecks() {
         })
         .returning();
 
+      // Update lastCheckedAt timestamp
+      await db.update(checks).set({ lastCheckedAt: new Date() }).where(eq(checks.id, check.id));
+
       if (isCritical || isWarning) {
-        const existingIncident = await db.query.incidents.findFirst({
-          where: and(eq(incidents.siteId, site.id), isNull(incidents.resolvedAt)),
-        });
+        const existingIncident = await findOpenIncidentForCheck(site.id, check.id);
 
         if (!existingIncident) {
-          await db.insert(incidents).values({
-            siteId: site.id,
-            checkResultId: newResult.id,
-            severity: status,
-            issue: result.errorMsg || `SSL certificate expires in ${result.daysRemaining} days`,
-          });
+          const [newIncident] = await db
+            .insert(incidents)
+            .values({
+              siteId: site.id,
+              checkResultId: newResult.id,
+              severity: status,
+              issue: result.errorMsg || `SSL certificate expires in ${result.daysRemaining} days`,
+            })
+            .returning();
+          if (newIncident) {
+            triggerAlertForIncident(newIncident.id, 'created').catch(err => console.error(err));
+          }
         }
       } else {
-        const openIncident = await db.query.incidents.findFirst({
-          where: and(eq(incidents.siteId, site.id), isNull(incidents.resolvedAt)),
-        });
+        const openIncident = await findOpenIncidentForCheck(site.id, check.id);
         if (openIncident) {
           await db
             .update(incidents)
             .set({ resolvedAt: new Date() })
             .where(eq(incidents.id, openIncident.id));
+          triggerAlertForIncident(openIncident.id, 'resolved').catch(err => console.error(err));
         }
       }
     } catch (err) {
@@ -233,28 +269,34 @@ async function runDailyChecks() {
         })
         .returning();
 
+      // Update lastCheckedAt timestamp
+      await db.update(checks).set({ lastCheckedAt: new Date() }).where(eq(checks.id, check.id));
+
       if (isCritical || isWarning) {
-        const existingIncident = await db.query.incidents.findFirst({
-          where: and(eq(incidents.siteId, site.id), isNull(incidents.resolvedAt)),
-        });
+        const existingIncident = await findOpenIncidentForCheck(site.id, check.id);
 
         if (!existingIncident) {
-          await db.insert(incidents).values({
-            siteId: site.id,
-            checkResultId: newResult.id,
-            severity: status,
-            issue: result.errorMsg || `Domain registration expires in ${result.daysRemaining} days`,
-          });
+          const [newIncident] = await db
+            .insert(incidents)
+            .values({
+              siteId: site.id,
+              checkResultId: newResult.id,
+              severity: status,
+              issue: result.errorMsg || `Domain registration expires in ${result.daysRemaining} days`,
+            })
+            .returning();
+          if (newIncident) {
+            triggerAlertForIncident(newIncident.id, 'created').catch(err => console.error(err));
+          }
         }
       } else {
-        const openIncident = await db.query.incidents.findFirst({
-          where: and(eq(incidents.siteId, site.id), isNull(incidents.resolvedAt)),
-        });
+        const openIncident = await findOpenIncidentForCheck(site.id, check.id);
         if (openIncident) {
           await db
             .update(incidents)
             .set({ resolvedAt: new Date() })
             .where(eq(incidents.id, openIncident.id));
+          triggerAlertForIncident(openIncident.id, 'resolved').catch(err => console.error(err));
         }
       }
     } catch (err) {
@@ -287,28 +329,34 @@ async function runDailyChecks() {
         })
         .returning();
 
+      // Update lastCheckedAt timestamp
+      await db.update(checks).set({ lastCheckedAt: new Date() }).where(eq(checks.id, check.id));
+
       if (!result.success) {
-        const existingIncident = await db.query.incidents.findFirst({
-          where: and(eq(incidents.siteId, site.id), isNull(incidents.resolvedAt)),
-        });
+        const existingIncident = await findOpenIncidentForCheck(site.id, check.id);
 
         if (!existingIncident) {
-          await db.insert(incidents).values({
-            siteId: site.id,
-            checkResultId: newResult.id,
-            severity: 'warning',
-            issue: `Missing tracking pixels: ${result.missingPixels.join(', ')}`,
-          });
+          const [newIncident] = await db
+            .insert(incidents)
+            .values({
+              siteId: site.id,
+              checkResultId: newResult.id,
+              severity: 'warning',
+              issue: `Missing tracking pixels: ${result.missingPixels.join(', ')}`,
+            })
+            .returning();
+          if (newIncident) {
+            triggerAlertForIncident(newIncident.id, 'created').catch(err => console.error(err));
+          }
         }
       } else {
-        const openIncident = await db.query.incidents.findFirst({
-          where: and(eq(incidents.siteId, site.id), isNull(incidents.resolvedAt)),
-        });
+        const openIncident = await findOpenIncidentForCheck(site.id, check.id);
         if (openIncident) {
           await db
             .update(incidents)
             .set({ resolvedAt: new Date() })
             .where(eq(incidents.id, openIncident.id));
+          triggerAlertForIncident(openIncident.id, 'resolved').catch(err => console.error(err));
         }
       }
     } catch (err) {
@@ -328,6 +376,9 @@ async function runDailyChecks() {
 interface FormCheckConfig {
   formUrl: string;
   formSelector?: string;
+  nameSelector?: string;
+  emailSelector?: string;
+  messageSelector?: string;
   submitButtonSelector?: string;
   fields?: Array<{ name: string; value: string }>;
   successText?: string;
@@ -364,23 +415,56 @@ async function runFormCheck(config: FormCheckConfig): Promise<{
 
     await page.goto(config.formUrl, { waitUntil: 'networkidle', timeout: 15000 });
 
-    const fields = config.fields || [
-      { name: 'name', value: 'Maintly Test Bot' },
-      { name: 'email', value: 'test@maintly.com' },
-      { name: 'message', value: 'Automated contact form check by Maintly.' },
-    ];
+    // Fill form fields using custom selectors if defined, otherwise fall back to heuristics
+    let filledName = false;
+    let filledEmail = false;
+    let filledMsg = false;
 
-    for (const field of fields) {
-      const inputSelector = `input[name="${field.name}"], input[id="${field.name}"], textarea[name="${field.name}"], textarea[id="${field.name}"]`;
-      const element = await page.$(inputSelector);
-      if (element) {
-        await element.fill(field.value);
-      } else {
-        const generalElement = await page.$(
-          `input[placeholder*="${field.name}" i], textarea[placeholder*="${field.name}" i]`
-        );
-        if (generalElement) {
-          await generalElement.fill(field.value);
+    if (config.nameSelector) {
+      const el = await page.$(config.nameSelector);
+      if (el) {
+        await el.fill('Maintly Test Bot');
+        filledName = true;
+      }
+    }
+    if (config.emailSelector) {
+      const el = await page.$(config.emailSelector);
+      if (el) {
+        await el.fill('test@maintly.com');
+        filledEmail = true;
+      }
+    }
+    if (config.messageSelector) {
+      const el = await page.$(config.messageSelector);
+      if (el) {
+        await el.fill('Automated contact form check by Maintly.');
+        filledMsg = true;
+      }
+    }
+
+    if (!filledName || !filledEmail || !filledMsg) {
+      const fields = config.fields || [
+        { name: 'name', value: 'Maintly Test Bot' },
+        { name: 'email', value: 'test@maintly.com' },
+        { name: 'message', value: 'Automated contact form check by Maintly.' },
+      ];
+
+      for (const field of fields) {
+        if (field.name === 'name' && filledName) continue;
+        if (field.name === 'email' && filledEmail) continue;
+        if (field.name === 'message' && filledMsg) continue;
+
+        const inputSelector = `input[name="${field.name}"], input[id="${field.name}"], textarea[name="${field.name}"], textarea[id="${field.name}"]`;
+        const element = await page.$(inputSelector);
+        if (element) {
+          await element.fill(field.value);
+        } else {
+          const generalElement = await page.$(
+            `input[placeholder*="${field.name}" i], textarea[placeholder*="${field.name}" i]`
+          );
+          if (generalElement) {
+            await generalElement.fill(field.value);
+          }
         }
       }
     }
@@ -467,28 +551,34 @@ async function processFormQueue() {
       })
       .returning();
 
+    // Update lastCheckedAt timestamp
+    await db.update(checks).set({ lastCheckedAt: new Date() }).where(eq(checks.id, job.checkId));
+
     if (!result.success) {
-      const existingIncident = await db.query.incidents.findFirst({
-        where: and(eq(incidents.siteId, job.siteId), isNull(incidents.resolvedAt)),
-      });
+      const existingIncident = await findOpenIncidentForCheck(job.siteId, job.checkId);
 
       if (!existingIncident) {
-        await db.insert(incidents).values({
-          siteId: job.siteId,
-          checkResultId: newResult.id,
-          severity: 'critical',
-          issue: result.errorMsg || 'Form submission validation failed',
-        });
+        const [newIncident] = await db
+          .insert(incidents)
+          .values({
+            siteId: job.siteId,
+            checkResultId: newResult.id,
+            severity: 'critical',
+            issue: result.errorMsg || 'Form submission validation failed',
+          })
+          .returning();
+        if (newIncident) {
+          triggerAlertForIncident(newIncident.id, 'created').catch(err => console.error(err));
+        }
       }
     } else {
-      const openIncident = await db.query.incidents.findFirst({
-        where: and(eq(incidents.siteId, job.siteId), isNull(incidents.resolvedAt)),
-      });
+      const openIncident = await findOpenIncidentForCheck(job.siteId, job.checkId);
       if (openIncident) {
         await db
           .update(incidents)
           .set({ resolvedAt: new Date() })
           .where(eq(incidents.id, openIncident.id));
+        triggerAlertForIncident(openIncident.id, 'resolved').catch(err => console.error(err));
       }
     }
   } catch (err) {
@@ -538,6 +628,9 @@ async function runFormChecks() {
         config: {
           formUrl: config.formUrl,
           formSelector: config.formSelector,
+          nameSelector: config.nameSelector,
+          emailSelector: config.emailSelector,
+          messageSelector: config.messageSelector,
           submitButtonSelector: config.submitButtonSelector,
           fields: config.fields,
           successText: config.successText,
@@ -558,7 +651,7 @@ async function runFormChecks() {
  */
 
 app.post('/check-form', async (req, res) => {
-  const { formUrl, formSelector, submitButtonSelector, fields, successText } = req.body;
+  const { formUrl, formSelector, nameSelector, emailSelector, messageSelector, submitButtonSelector, fields, successText } = req.body;
 
   if (!formUrl) {
     return res.status(400).json({ error: 'formUrl is required' });
@@ -570,6 +663,9 @@ app.post('/check-form', async (req, res) => {
     const result = await runFormCheck({
       formUrl,
       formSelector,
+      nameSelector,
+      emailSelector,
+      messageSelector,
       submitButtonSelector,
       fields,
       successText,
@@ -587,6 +683,59 @@ app.post('/check-form', async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+/**
+ * Endpoint to scan a contact form URL once, extract selectors using Gemini AI,
+ * and return the mapping configuration to save in the DB.
+ */
+app.post('/scan-form', async (req, res) => {
+  const { formUrl } = req.body;
+
+  if (!formUrl) {
+    return res.status(400).json({ error: 'formUrl is required' });
+  }
+
+  console.log(`[API] AI Form scan triggered for URL: ${formUrl}`);
+
+  let browser;
+  try {
+    browser = await chromium.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 800 },
+    });
+    const page = await context.newPage();
+
+    await page.goto(formUrl, { waitUntil: 'networkidle', timeout: 15000 });
+
+    // Extract HTML snippet of either the <form> element or the full page body
+    const formHtml = await page.evaluate(() => {
+      const form = document.querySelector('form');
+      return form ? form.outerHTML : document.body.innerHTML;
+    });
+
+    await browser.close();
+
+    // Call Gemini API service helper
+    const selectors = await analyzeFormHtml(formHtml);
+
+    return res.json({
+      success: true,
+      selectors,
+    });
+  } catch (err) {
+    if (browser) {
+      await browser.close().catch(() => {});
+    }
+    console.error(`[API] AI Form scan error for ${formUrl}:`, err);
+    return res.status(500).json({
+      success: false,
       error: err instanceof Error ? err.message : String(err),
     });
   }
@@ -614,6 +763,33 @@ cron.schedule('0 0 * * *', async () => {
 cron.schedule('0 */12 * * *', async () => {
   console.log('[Cron Trigger] 12-hour Form submission checks running...');
   await runFormChecks();
+});
+
+// Cron 4: Escalation Check (Runs every hour)
+cron.schedule('0 * * * *', async () => {
+  console.log('[Cron Trigger] Hourly escalation checks running...');
+  try {
+    const twelveHoursAgo = new Date();
+    twelveHoursAgo.setHours(twelveHoursAgo.getHours() - 12);
+
+    const staleIncidents = await db.query.incidents.findMany({
+      where: and(
+        isNull(incidents.resolvedAt),
+        sql`${incidents.createdAt} < ${twelveHoursAgo}`
+      ),
+    });
+
+    console.log(`[Escalation] Found ${staleIncidents.length} active incidents older than 12 hours.`);
+
+    for (const inc of staleIncidents) {
+      console.log(`[Escalation] Re-alerting for unresolved incident: ${inc.id} (${inc.issue})`);
+      await triggerAlertForIncident(inc.id, 'created').catch((err) =>
+        console.error(`[Escalation] Failed to re-alert for incident ${inc.id}:`, err)
+      );
+    }
+  } catch (err) {
+    console.error('[Escalation] Error running escalation checks:', err);
+  }
 });
 
 // Start Express Server

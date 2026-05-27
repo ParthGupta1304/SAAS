@@ -65,7 +65,7 @@
 | Payments | **Lemon Squeezy** | 5% per txn | Merchant of Record — handles global tax/GST |
 | PDF Reports | **React-PDF** | $0 | Server-side, no browser needed |
 | Form Testing | **Playwright** (on Railway) | Included | Multi-browser, auto-wait, best reliability |
-| AI Summaries | **Google Gemini 2.0 Flash** | ~$5 | $0.10/1M input tokens — cheapest quality option |
+| AI Summaries | **Google Gemini 2.5 Flash** | ~$10 | $0.30/1M input tokens — best balance of cost & intelligence |
 | Product Analytics | **PostHog** | $0 | 1M free events, session replay, feature flags |
 | **Total MVP Cost** | | **~$30-35/mo** | |
 
@@ -238,7 +238,7 @@
   - Store aggregated data in `reports` table
 
 - `[ ]` **4.2 — AI-powered narrative generation**
-  - Integrate Google Gemini 2.0 Flash API
+  - Integrate Google Gemini 2.5 Flash API
   - Prompt template that converts raw metrics into client-safe language:
     - Input: JSON of site metrics, incidents, resolutions
     - Output: 2-3 paragraph executive summary
@@ -246,7 +246,7 @@
   - Allow manual editing before sending
 
 - `[ ]` **4.3 — AI Playwright Form Auditor**
-  - Integrate Gemini 2.0 Flash into the background worker queue (`worker/server.ts`)
+  - Integrate Gemini 2.5 Flash into the background worker queue (`worker/server.ts`)
   - Auto-discovery for contact fields: AI scans HTML forms, automatically resolves CSS selectors for key fields (Name, Email, Message) and submits them without manual selector mapping
   - AI Success Verification: AI analyzes the resulting DOM text to confirm confirmation state or log specific validation errors
   - Captcha/error logging hooks and screenshot uploads to Supabase Storage

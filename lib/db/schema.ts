@@ -41,6 +41,9 @@ export const organizations = pgTable('organizations', {
   isWhiteLabel: boolean('is_white_label').default(false).notNull(),
   formChecksEnabled: boolean('form_checks_enabled').default(false).notNull(),
   maxSites: integer('max_sites').default(3).notNull(),
+  logoUrl: text('logo_url'),
+  brandColor: text('brand_color'),
+  customFooter: text('custom_footer'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -95,6 +98,7 @@ export const incidents = pgTable('incidents', {
   severity: checkStatusEnum('severity').notNull(),
   issue: text('issue').notNull(),
   resolvedAt: timestamp('resolved_at'),
+  isRead: boolean('is_read').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
