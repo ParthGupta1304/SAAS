@@ -1051,7 +1051,7 @@ function PricingSection({
         <SectionHeader
           eyebrow="Pricing"
           title="Simple plans for care-plan portfolios."
-          text="Start your 14-day free trial (up to 3 sites) per organization. No credit card required. Upgrade anytime."
+          text="Try any plan free for 7 days. Card, bank, or UPI autopay verification required to activate trial. Expired trials are suspended, and inactive data is pruned after 7 days."
         />
         <div className="mx-auto mt-8 flex w-fit rounded-md border border-white/10 bg-white/[0.04] p-1">
           {(["monthly", "yearly"] as const).map((item) => (
@@ -1089,9 +1089,12 @@ function PricingSection({
                 <p className="mt-5 text-4xl font-semibold">{plan.displayPrice}</p>
                 <p className="mt-1 text-sm text-zinc-500">/ month · {plan.sites}</p>
                 <p className="mt-5 min-h-12 text-sm leading-6 text-zinc-400">{plan.description}</p>
-                <button className={cn("mt-6 w-full rounded-md px-4 py-2 text-sm font-semibold", plan.popular ? "bg-cyan-300 text-zinc-950" : "bg-white text-zinc-950")}>
-                  Join waitlist
-                </button>
+                <Link
+                  href="/sign-up"
+                  className={cn("mt-6 block text-center w-full rounded-md px-4 py-2 text-sm font-semibold transition hover:opacity-90", plan.popular ? "bg-cyan-300 text-zinc-950" : "bg-white text-zinc-950")}
+                >
+                  Start 7-day Trial
+                </Link>
               </div>
               <div className="mt-8 border-t border-white/5 pt-5 grid gap-2 text-sm text-zinc-300">
                 {plan.features.map((feature) => (

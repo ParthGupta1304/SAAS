@@ -74,6 +74,15 @@ export async function POST(req: NextRequest) {
     
     const activeSites = Number(siteCountResult[0]?.count || 0);
 
+    // Enforce trial/plan status check
+    const isExpired = new Date() > new Date(org.trialEndsAt);
+    if (isExpired) {
+      return NextResponse.json(
+        { error: 'Your workspace subscription or trial has expired. Please update your billing details to continue.' },
+        { status: 403 }
+      );
+    }
+
     if (activeSites >= org.maxSites) {
       return NextResponse.json(
         { error: `Site limit reached. You are on the ${org.plan} plan which supports up to ${org.maxSites} sites. Please upgrade to add more.` },

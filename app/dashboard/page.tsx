@@ -20,6 +20,7 @@ import { AddSiteDialog } from '@/components/add-site-dialog';
 import { ClerkSetupCard } from '@/components/clerk-setup-card';
 import { isClerkConfigured } from '@/lib/clerk';
 import { NotificationBell } from '@/components/notification-bell';
+import { OnboardingWizard } from '@/components/onboarding-wizard';
 
 // Inline CN utility
 function cn(...classes: Array<string | false | undefined>) {
@@ -269,165 +270,163 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="border-b border-white/5 bg-[#070b12]/50">
-        <div className="section-shell flex gap-6">
-          <a href="/dashboard" className="border-b-2 border-cyan-400 py-3 text-sm font-medium text-white">Portfolio</a>
-          <a href="/dashboard/reports" className="border-b-2 border-transparent py-3 text-sm font-medium text-zinc-400 hover:text-white">Reports</a>
-          <a href="/dashboard/settings/branding" className="border-b-2 border-transparent py-3 text-sm font-medium text-zinc-400 hover:text-white">Branding</a>
-        </div>
-      </div>
-
-      <section className="section-shell py-8">
-        {/* Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {stats.map((stat) => (
-            <div key={stat.label} className="glass-panel rounded-lg p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-zinc-400">{stat.label}</p>
-                <stat.icon className="size-4 text-cyan-300" />
-              </div>
-              <p className="mt-4 text-3xl font-semibold text-white">{stat.value}</p>
-              <p className="mt-2 text-sm text-zinc-500">{stat.note}</p>
+      {orgSites.length === 0 ? (
+        <section className="section-shell py-8">
+          <OnboardingWizard org={org} />
+        </section>
+      ) : (
+        <>
+          <div className="border-b border-white/5 bg-[#070b12]/50">
+            <div className="section-shell flex gap-6">
+              <a href="/dashboard" className="border-b-2 border-cyan-400 py-3 text-sm font-medium text-white">Portfolio</a>
+              <a href="/dashboard/reports" className="border-b-2 border-transparent py-3 text-sm font-medium text-zinc-400 hover:text-white">Reports</a>
+              <a href="/dashboard/settings/branding" className="border-b-2 border-transparent py-3 text-sm font-medium text-zinc-400 hover:text-white">Branding</a>
             </div>
-          ))}
-        </div>
-
-        {/* Dynamic Sites and Incidents Sections */}
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-          {/* Sites Portfolio Table */}
-          <div className="glass-panel rounded-lg p-6">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm uppercase tracking-[0.18em] text-cyan-200">Sites Portfolio</p>
-                <h2 className="mt-2 text-xl font-semibold text-white">Monitored Websites</h2>
-              </div>
-              <AddSiteDialog maxSites={org.maxSites} activeSitesCount={orgSites.length} />
-            </div>
-
-            {orgSites.length === 0 ? (
-              <div className="mt-12 text-center py-12 border border-dashed border-white/10 rounded-lg bg-white/[0.01]">
-                <Globe className="mx-auto size-12 text-zinc-600" />
-                <h3 className="mt-4 text-lg font-medium text-white">No sites added yet</h3>
-                <p className="mt-2 text-sm text-zinc-400 max-w-sm mx-auto">
-                  Add your first website to enable automatic uptime, SSL expiration, and domain checking.
-                </p>
-              </div>
-            ) : (
-              <div className="mt-6 overflow-x-auto">
-                <table className="w-full min-w-[600px] text-left text-sm">
-                  <thead className="text-xs uppercase text-zinc-500 border-b border-white/10">
-                    <tr>
-                      <th className="pb-3 font-medium">Website</th>
-                      <th className="pb-3 font-medium">Status</th>
-                      <th className="pb-3 font-medium">Uptime</th>
-                      <th className="pb-3 font-medium">Checks</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {orgSites.map((site) => {
-                      const siteIncident = activeIncidents.find((inc) => inc.siteId === site.id);
-                      
-                      const statusText = siteIncident ? siteIncident.issue : 'Healthy';
-                      const tone = siteIncident 
-                        ? (siteIncident.severity === 'critical' ? 'red' : 'amber') 
-                        : 'emerald';
-
-                      return (
-                        <tr key={site.id} className="hover:bg-white/[0.01] transition-colors">
-                          <td className="py-4 pr-4">
-                            <p className="font-medium text-white">{site.name}</p>
-                            <a 
-                              href={site.url} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              className="text-xs text-zinc-500 hover:text-cyan-300 flex items-center gap-1 w-fit mt-0.5"
-                            >
-                              {site.url.replace(/^https?:\/\//i, '')}
-                              <ExternalLink className="size-3" />
-                            </a>
-                          </td>
-                          <td className="py-4">
-                            <StatusBadge tone={tone}>{statusText}</StatusBadge>
-                          </td>
-                          <td className="py-4 text-zinc-300">
-                            {siteUptimeMap.get(site.id) ?? '—'}
-                          </td>
-                          <td className="py-4 text-xs text-zinc-400">
-                            <div className="flex gap-2">
-                              {site.checks.map((c) => (
-                                <span 
-                                  key={c.id} 
-                                  className="rounded px-1.5 py-0.5 bg-white/5 border border-white/5 uppercase font-mono"
-                                >
-                                  {c.type}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </div>
 
-          {/* Incident Feed */}
-          <div className="grid gap-6">
-            <div className="glass-panel rounded-lg p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm uppercase tracking-[0.18em] text-cyan-200">Incident feed</p>
-                  <h2 className="mt-2 text-xl font-semibold text-white">Needs Action</h2>
-                </div>
-                <AlertTriangle className="size-5 text-rose-300" />
-              </div>
-
-              {incidentFeed.length === 0 ? (
-                <div className="mt-8 text-center py-8 rounded-lg bg-emerald-400/5 border border-emerald-400/10 text-emerald-300 flex flex-col items-center justify-center gap-2">
-                  <CheckCircle2 className="size-7 text-emerald-300" />
-                  <p className="text-sm font-medium">All websites healthy</p>
-                </div>
-              ) : (
-                <div className="mt-6 grid gap-4">
-                  {incidentFeed.map((incident) => (
-                    <div key={incident.title} className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <h3 className="text-sm font-medium text-white">{incident.title}</h3>
-                          <p className="mt-1 text-xs text-zinc-400">{incident.site}</p>
-                        </div>
-                        <span className={cn('text-xs font-semibold px-2 py-0.5 rounded bg-white/5', incident.tone)}>
-                          {incident.age}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Work Queue */}
-            <div className="glass-panel rounded-lg p-6">
-              <p className="text-sm uppercase tracking-[0.18em] text-cyan-200">Workspace status</p>
-              <div className="mt-5 grid gap-4">
-                {workQueue.map((item) => (
-                  <div key={item.title} className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
-                    <div className="flex items-start gap-3">
-                      <item.icon className="mt-0.5 size-4 text-cyan-300 shrink-0" />
-                      <div>
-                        <h3 className="text-sm font-medium text-white">{item.title}</h3>
-                        <p className="mt-1 text-xs text-zinc-400">{item.detail}</p>
-                      </div>
-                    </div>
+          <section className="section-shell py-8">
+            {/* Stats Grid */}
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {stats.map((stat) => (
+                <div key={stat.label} className="glass-panel rounded-lg p-5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-zinc-400">{stat.label}</p>
+                    <stat.icon className="size-4 text-cyan-300" />
                   </div>
-                ))}
+                  <p className="mt-4 text-3xl font-semibold text-white">{stat.value}</p>
+                  <p className="mt-2 text-sm text-zinc-500">{stat.note}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Dynamic Sites and Incidents Sections */}
+            <div className="mt-6 grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
+              {/* Sites Portfolio Table */}
+              <div className="glass-panel rounded-lg p-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.18em] text-cyan-200">Sites Portfolio</p>
+                    <h2 className="mt-2 text-xl font-semibold text-white">Monitored Websites</h2>
+                  </div>
+                  <AddSiteDialog maxSites={org.maxSites} activeSitesCount={orgSites.length} />
+                </div>
+
+                <div className="mt-6 overflow-x-auto">
+                  <table className="w-full min-w-[600px] text-left text-sm">
+                    <thead className="text-xs uppercase text-zinc-500 border-b border-white/10">
+                      <tr>
+                        <th className="pb-3 font-medium">Website</th>
+                        <th className="pb-3 font-medium">Status</th>
+                        <th className="pb-3 font-medium">Uptime</th>
+                        <th className="pb-3 font-medium">Checks</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {orgSites.map((site) => {
+                        const siteIncident = activeIncidents.find((inc) => inc.siteId === site.id);
+                        
+                        const statusText = siteIncident ? siteIncident.issue : 'Healthy';
+                        const tone = siteIncident 
+                          ? (siteIncident.severity === 'critical' ? 'red' : 'amber') 
+                          : 'emerald';
+
+                        return (
+                          <tr key={site.id} className="hover:bg-white/[0.01] transition-colors">
+                            <td className="py-4 pr-4">
+                              <p className="font-medium text-white">{site.name}</p>
+                              <a 
+                                href={site.url} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                className="text-xs text-zinc-500 hover:text-cyan-300 flex items-center gap-1 w-fit mt-0.5"
+                              >
+                                {site.url.replace(/^https?:\/\//i, '')}
+                                <ExternalLink className="size-3" />
+                              </a>
+                            </td>
+                            <td className="py-4">
+                              <StatusBadge tone={tone}>{statusText}</StatusBadge>
+                            </td>
+                            <td className="py-4 text-zinc-300">
+                              {siteUptimeMap.get(site.id) ?? '—'}
+                            </td>
+                            <td className="py-4 text-xs text-zinc-400">
+                              <div className="flex gap-2">
+                                {site.checks.map((c) => (
+                                  <span 
+                                    key={c.id} 
+                                    className="rounded px-1.5 py-0.5 bg-white/5 border border-white/5 uppercase font-mono"
+                                  >
+                                    {c.type}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Incident Feed */}
+              <div className="grid gap-6">
+                <div className="glass-panel rounded-lg p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm uppercase tracking-[0.18em] text-cyan-200">Incident feed</p>
+                      <h2 className="mt-2 text-xl font-semibold text-white">Needs Action</h2>
+                    </div>
+                    <AlertTriangle className="size-5 text-rose-300" />
+                  </div>
+
+                  {incidentFeed.length === 0 ? (
+                    <div className="mt-8 text-center py-8 rounded-lg bg-emerald-400/5 border border-emerald-400/10 text-emerald-300 flex flex-col items-center justify-center gap-2">
+                      <CheckCircle2 className="size-7 text-emerald-300" />
+                      <p className="text-sm font-medium">All websites healthy</p>
+                    </div>
+                  ) : (
+                    <div className="mt-6 grid gap-4">
+                      {incidentFeed.map((incident) => (
+                        <div key={incident.title} className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <h3 className="text-sm font-medium text-white">{incident.title}</h3>
+                              <p className="mt-1 text-xs text-zinc-400">{incident.site}</p>
+                            </div>
+                            <span className={cn('text-xs font-semibold px-2 py-0.5 rounded bg-white/5', incident.tone)}>
+                              {incident.age}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Work Queue */}
+                <div className="glass-panel rounded-lg p-6">
+                  <p className="text-sm uppercase tracking-[0.18em] text-cyan-200">Workspace status</p>
+                  <div className="mt-5 grid gap-4">
+                    {workQueue.map((item) => (
+                      <div key={item.title} className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
+                        <div className="flex items-start gap-3">
+                          <item.icon className="mt-0.5 size-4 text-cyan-300 shrink-0" />
+                          <div>
+                            <h3 className="text-sm font-medium text-white">{item.title}</h3>
+                            <p className="mt-1 text-xs text-zinc-400">{item.detail}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
+          </section>
+        </>
+      )}
     </main>
   );
 }

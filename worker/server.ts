@@ -2,7 +2,7 @@ import express from 'express';
 import cron from 'node-cron';
 import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
-import { eq, and, ne, or, isNull, sql } from 'drizzle-orm';
+import { eq, and, ne, or, isNull, sql, gte } from 'drizzle-orm';
 
 import { db } from '../lib/db';
 import { sites, checks, checkResults, incidents, organizations } from '../lib/db/schema';
@@ -119,15 +119,41 @@ async function runUptimeChecks() {
     .select({
       check: checks,
       site: sites,
+      org: organizations,
     })
     .from(checks)
     .innerJoin(sites, eq(checks.siteId, sites.id))
-    .where(and(eq(checks.type, 'uptime'), eq(checks.isActive, true), eq(sites.isActive, true)));
+    .innerJoin(organizations, eq(sites.orgId, organizations.id))
+    .where(
+      and(
+        eq(checks.type, 'uptime'),
+        eq(checks.isActive, true),
+        eq(sites.isActive, true),
+        gte(organizations.trialEndsAt, new Date())
+      )
+    );
 
   console.log(`[Scheduler] Found ${activeUptimeChecks.length} active uptime checks to execute.`);
 
-  await processInBatches(activeUptimeChecks, 50, async ({ check, site }) => {
+  await processInBatches(activeUptimeChecks, 50, async ({ check, site, org }) => {
     try {
+      // Enforce custom interval clamped by plan tier:
+      // starter tier (trialing or paid) -> minimum 5 minutes
+      // others -> minimum 1 minute
+      let effectiveInterval = check.interval;
+      if (org.plan === 'starter' || org.plan === 'trial') {
+        effectiveInterval = Math.max(5, check.interval);
+      } else {
+        effectiveInterval = Math.max(1, check.interval);
+      }
+
+      if (check.lastCheckedAt) {
+        const elapsedMinutes = Math.floor((Date.now() - new Date(check.lastCheckedAt).getTime()) / 60000);
+        if (elapsedMinutes < effectiveInterval) {
+          return; // skip execution
+        }
+      }
+
       const result = await checkUptime(site.url);
 
       const [newResult] = await db
@@ -193,7 +219,15 @@ async function runDailyChecks() {
     .select({ check: checks, site: sites })
     .from(checks)
     .innerJoin(sites, eq(checks.siteId, sites.id))
-    .where(and(eq(checks.type, 'ssl'), eq(checks.isActive, true), eq(sites.isActive, true)));
+    .innerJoin(organizations, eq(sites.orgId, organizations.id))
+    .where(
+      and(
+        eq(checks.type, 'ssl'),
+        eq(checks.isActive, true),
+        eq(sites.isActive, true),
+        gte(organizations.trialEndsAt, new Date())
+      )
+    );
 
   await processInBatches(activeSslChecks, 50, async ({ check, site }) => {
     try {
@@ -251,7 +285,15 @@ async function runDailyChecks() {
     .select({ check: checks, site: sites })
     .from(checks)
     .innerJoin(sites, eq(checks.siteId, sites.id))
-    .where(and(eq(checks.type, 'domain'), eq(checks.isActive, true), eq(sites.isActive, true)));
+    .innerJoin(organizations, eq(sites.orgId, organizations.id))
+    .where(
+      and(
+        eq(checks.type, 'domain'),
+        eq(checks.isActive, true),
+        eq(sites.isActive, true),
+        gte(organizations.trialEndsAt, new Date())
+      )
+    );
 
   await processInBatches(activeDomainChecks, 50, async ({ check, site }) => {
     try {
@@ -309,7 +351,15 @@ async function runDailyChecks() {
     .select({ check: checks, site: sites })
     .from(checks)
     .innerJoin(sites, eq(checks.siteId, sites.id))
-    .where(and(eq(checks.type, 'tracking'), eq(checks.isActive, true), eq(sites.isActive, true)));
+    .innerJoin(organizations, eq(sites.orgId, organizations.id))
+    .where(
+      and(
+        eq(checks.type, 'tracking'),
+        eq(checks.isActive, true),
+        eq(sites.isActive, true),
+        gte(organizations.trialEndsAt, new Date())
+      )
+    );
 
   await processInBatches(activePixelChecks, 50, async ({ check, site }) => {
     try {
@@ -612,6 +662,7 @@ async function runFormChecks() {
         eq(checks.isActive, true),
         eq(sites.isActive, true),
         eq(checks.type, 'form'),
+        gte(organizations.trialEndsAt, new Date()),
         or(ne(organizations.plan, 'trial'), eq(organizations.formChecksEnabled, true))
       )
     );
@@ -789,6 +840,32 @@ cron.schedule('0 * * * *', async () => {
     }
   } catch (err) {
     console.error('[Escalation] Error running escalation checks:', err);
+  }
+});
+
+// Cron 5: Data Pruning Check (Runs daily at 01:00)
+cron.schedule('0 1 * * *', async () => {
+  console.log('[Cron Trigger] Daily 7-day inactive organization data pruning running...');
+  try {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    // Fetch organizations whose trial / billing expired more than 7 days ago
+    const expiredOrgs = await db
+      .select({ id: organizations.id, name: organizations.name })
+      .from(organizations)
+      .where(sql`${organizations.trialEndsAt} < ${sevenDaysAgo}`);
+
+    console.log(`[Pruner] Found ${expiredOrgs.length} inactive organizations to prune.`);
+
+    for (const org of expiredOrgs) {
+      console.log(`[Pruner] Deleting organization: ${org.name} (${org.id}) due to expired billing > 7 days.`);
+      // CASCADE is configured on sites table (onDelete: 'cascade')
+      // so deleting the organization will cascade delete sites, checks, results, and incidents.
+      await db.delete(organizations).where(eq(organizations.id, org.id));
+    }
+  } catch (err) {
+    console.error('[Pruner] Error running data pruning:', err);
   }
 });
 
