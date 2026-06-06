@@ -1,19 +1,6 @@
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-
-  webpack(config) {
-    if (process.env.MOCK_AUTH === 'true') {
-      config.resolve.alias['@clerk/nextjs/server'] = path.resolve(__dirname, 'lib/clerk-mock/server.ts');
-      config.resolve.alias['@clerk/nextjs'] = path.resolve(__dirname, 'lib/clerk-mock/index.tsx');
-    }
-    return config;
-  },
 
   /**
    * Security headers applied to all routes.
