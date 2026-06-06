@@ -7,8 +7,8 @@ export default function SignInPage() {
   return (
     <AuthShell
       eyebrow="Authentication"
-      title="Sign in to your agency workspace."
-      description="Use Clerk to handle account security, session state, and the handoff into your agency dashboard."
+      title="Sign in to your workspace."
+      description="Use Clerk to handle account security, session state, and the handoff into your dashboard."
     >
       {isClerkFrontendReady ? (
         <SignIn

@@ -55,7 +55,7 @@ export function AuthShell({
             </p>
             <div className="mt-8 grid gap-3 text-sm text-zinc-400 sm:grid-cols-2">
               <div className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
-                Invite your agency team into a shared workspace with one active
+                Invite your team into a shared workspace with one active
                 organization.
               </div>
               <div className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
