@@ -4,6 +4,19 @@ import { db } from '@/lib/db';
 import { getOrCreateOrg } from '@/lib/db/org-helper';
 import { sites, incidents } from '@/lib/db/schema';
 import { eq, and, inArray, desc } from 'drizzle-orm';
+import { z } from 'zod';
+
+// M17 fix: Zod schema for PATCH validation
+const patchNotificationsSchema = z.union([
+  z.object({ markAll: z.literal(true) }),
+  z.object({
+    markAll: z.literal(false).optional(),
+    incidentIds: z
+      .array(z.string().uuid('Each incidentId must be a valid UUID'))
+      .min(1, 'At least one incidentId is required')
+      .max(100, 'Cannot mark more than 100 incidents at once'),
+  }),
+]);
 
 /**
  * GET /api/notifications
@@ -47,6 +60,7 @@ export async function GET() {
 /**
  * PATCH /api/notifications
  * Marks alerts/incidents as read. Supports marking specific logs by IDs or marking all as read.
+ * M17 fix: incidentIds are validated as UUIDs with array length limit.
  */
 export async function PATCH(req: NextRequest) {
   try {
@@ -67,8 +81,24 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: true, count: 0 });
     }
 
-    const body = await req.json();
-    const { markAll, incidentIds } = body;
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+
+    // M17 fix: Validate with zod
+    const parsed = patchNotificationsSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const { markAll } = parsed.data;
+    const incidentIds = 'incidentIds' in parsed.data ? parsed.data.incidentIds : undefined;
 
     let updatedRows = 0;
     if (markAll) {
@@ -83,7 +113,7 @@ export async function PATCH(req: NextRequest) {
         )
         .returning();
       updatedRows = result.length;
-    } else if (Array.isArray(incidentIds) && incidentIds.length > 0) {
+    } else if (incidentIds && incidentIds.length > 0) {
       const result = await db
         .update(incidents)
         .set({ isRead: true })

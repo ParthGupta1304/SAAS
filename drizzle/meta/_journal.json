@@ -15,6 +15,13 @@
       "when": 1779899013817,
       "tag": "0001_sad_namor",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780734987475,
+      "tag": "0002_add_indexes_and_constraints",
+      "breakpoints": true
     }
   ]
 }

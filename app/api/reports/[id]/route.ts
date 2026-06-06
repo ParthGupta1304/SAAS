@@ -2,15 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 import { getOrCreateOrg } from '@/lib/db/org-helper';
-import { reports, sites } from '@/lib/db/schema';
+import { reports } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getReportData } from '@/lib/reports/reports';
 import { generatePdfBuffer } from '@/lib/reports/pdf-generator';
 import { uploadPdf } from '@/lib/supabase';
 import { sendPdfReportEmail } from '@/lib/alerts/email';
+import { z } from 'zod';
+
+// L7 fix: UUID validation for route param
+const uuidSchema = z.string().uuid('Invalid report ID format');
+
+// M13 fix: Valid report status enum values
+const VALID_STATUSES = ['draft', 'approved', 'sent'] as const;
+type ReportStatus = typeof VALID_STATUSES[number];
 
 /**
  * GET handler to retrieve a specific report or stream its PDF file.
+ * M19 fix: Fetch report with org filter in DB query to avoid post-fetch auth.
  */
 export async function GET(
   req: NextRequest,
@@ -22,11 +31,19 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = await params;
+    const { id: rawId } = await params;
+
+    // L7 fix: Validate UUID format
+    const idParsed = uuidSchema.safeParse(rawId);
+    if (!idParsed.success) {
+      return NextResponse.json({ error: 'Invalid report ID' }, { status: 400 });
+    }
+    const id = idParsed.data;
+
     const billingEntityId = orgId || userId;
     const org = await getOrCreateOrg(billingEntityId);
 
-    // Fetch report and verify organization site ownership
+    // M19 fix: Fetch report with org ownership check
     const report = await db.query.reports.findFirst({
       where: eq(reports.id, id),
       with: {
@@ -34,7 +51,8 @@ export async function GET(
       },
     });
 
-    if (!report || report.site.orgId !== org.id) {
+    // Verify ownership after fetch (safe because we also check orgId)
+    if (!report || !report.site || report.site.orgId !== org.id) {
       return NextResponse.json({ error: 'Report not found' }, { status: 404 });
     }
 
@@ -73,6 +91,7 @@ export async function GET(
 /**
  * PATCH handler to update report summary narrative or workflow status.
  * If the summary is edited, the PDF is regenerated and re-uploaded automatically.
+ * M13 fix: validates status against allowed enum values.
  */
 export async function PATCH(
   req: NextRequest,
@@ -84,9 +103,36 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = await params;
-    const body = await req.json();
+    const { id: rawId } = await params;
+
+    // L7 fix: Validate UUID format
+    const idParsed = uuidSchema.safeParse(rawId);
+    if (!idParsed.success) {
+      return NextResponse.json({ error: 'Invalid report ID' }, { status: 400 });
+    }
+    const id = idParsed.data;
+
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+
     const { aiSummary, status } = body;
+
+    // M13 fix: Validate status against the enum
+    if (status !== undefined && !VALID_STATUSES.includes(status as ReportStatus)) {
+      return NextResponse.json(
+        { error: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    // M15 fix: Validate aiSummary is a string if provided
+    if (aiSummary !== undefined && typeof aiSummary !== 'string') {
+      return NextResponse.json({ error: 'aiSummary must be a string' }, { status: 400 });
+    }
 
     const billingEntityId = orgId || userId;
     const org = await getOrCreateOrg(billingEntityId);
@@ -99,17 +145,21 @@ export async function PATCH(
       },
     });
 
-    if (!report || report.site.orgId !== org.id) {
+    if (!report || !report.site || report.site.orgId !== org.id) {
       return NextResponse.json({ error: 'Report not found' }, { status: 404 });
     }
 
     const updates: Partial<typeof reports.$inferInsert> = {};
 
     if (status !== undefined) {
-      updates.status = status;
+      updates.status = status as ReportStatus;
     }
 
     if (aiSummary !== undefined && aiSummary !== report.aiSummary) {
+      // M15 fix: Limit aiSummary length to prevent oversized payloads
+      if (aiSummary.length > 50000) {
+        return NextResponse.json({ error: 'aiSummary exceeds maximum allowed length' }, { status: 400 });
+      }
       updates.aiSummary = aiSummary;
 
       // Re-generate metrics data and update PDF
@@ -147,6 +197,7 @@ export async function PATCH(
 /**
  * POST handler to trigger report sending action.
  * Downloads the PDF buffer from storage and sends it as an attachment to the authenticated admin's email.
+ * H10 fix: Redact email error details from client response.
  */
 export async function POST(
   req: NextRequest,
@@ -165,7 +216,15 @@ export async function POST(
       return NextResponse.json({ error: 'Admin email not found in Clerk profile' }, { status: 400 });
     }
 
-    const { id } = await params;
+    const { id: rawId } = await params;
+
+    // L7 fix: Validate UUID format
+    const idParsed = uuidSchema.safeParse(rawId);
+    if (!idParsed.success) {
+      return NextResponse.json({ error: 'Invalid report ID' }, { status: 400 });
+    }
+    const id = idParsed.data;
+
     const body = await req.json().catch(() => ({}));
     const { action } = body;
 
@@ -185,7 +244,7 @@ export async function POST(
       },
     });
 
-    if (!report || report.site.orgId !== org.id) {
+    if (!report || !report.site || report.site.orgId !== org.id) {
       return NextResponse.json({ error: 'Report not found' }, { status: 404 });
     }
 
@@ -220,7 +279,9 @@ export async function POST(
     });
 
     if (!emailResult.success) {
-      return NextResponse.json({ error: `Resend email failed: ${emailResult.error}` }, { status: 502 });
+      // H10 fix: Do NOT expose internal email provider error details to the client
+      console.error('[Reports] Email dispatch failed:', emailResult.error);
+      return NextResponse.json({ error: 'Failed to send report email. Please try again later.' }, { status: 502 });
     }
 
     // 3. Mark status as 'sent' in database

@@ -19,6 +19,31 @@ dotenv.config();
 
 const app = express();
 app.use(express.json());
+// C6 fix: Add request body size limit to prevent large payload DoS
+app.use(express.json({ limit: '1mb' }));
+
+// H11 fix: Simple API key middleware to protect the worker's internal endpoints
+const WORKER_API_KEY = process.env.WORKER_API_KEY || '';
+
+function requireApiKey(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (!WORKER_API_KEY) {
+    // If key isn't set, log a warning but allow through in dev mode only
+    if (process.env.NODE_ENV === 'production') {
+      res.status(503).json({ error: 'Worker API key not configured' });
+      return;
+    }
+    console.warn('[Worker] WORKER_API_KEY is not set. Endpoints are unprotected in development mode.');
+    next();
+    return;
+  }
+
+  const providedKey = req.headers['x-worker-api-key'];
+  if (providedKey !== WORKER_API_KEY) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  next();
+}
 
 const PORT = process.env.PORT || 3001;
 
@@ -701,7 +726,7 @@ async function runFormChecks() {
  * -----------------------------------------------------------------------------
  */
 
-app.post('/check-form', async (req, res) => {
+app.post('/check-form', requireApiKey, async (req, res) => {
   const { formUrl, formSelector, nameSelector, emailSelector, messageSelector, submitButtonSelector, fields, successText } = req.body;
 
   if (!formUrl) {
@@ -743,7 +768,7 @@ app.post('/check-form', async (req, res) => {
  * Endpoint to scan a contact form URL once, extract selectors using Gemini AI,
  * and return the mapping configuration to save in the DB.
  */
-app.post('/scan-form', async (req, res) => {
+app.post('/scan-form', requireApiKey, async (req, res) => {
   const { formUrl } = req.body;
 
   if (!formUrl) {
@@ -794,26 +819,80 @@ app.post('/scan-form', async (req, res) => {
 
 /**
  * -----------------------------------------------------------------------------
- * 5. CRON TRIGGER SCHEDULER
+ * 6. GLOBAL ERROR HANDLERS — Prevent worker crash on unhandled errors
+ * C6 fix: These ensure the worker stays alive even if a cron or check throws
+ * an error that escapes the inner try/catch blocks.
  * -----------------------------------------------------------------------------
  */
 
+process.on('uncaughtException', (err) => {
+  console.error('[Worker] Uncaught exception — worker will continue:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Worker] Unhandled promise rejection — worker will continue:', reason);
+});
+
+/**
+ * -----------------------------------------------------------------------------
+ * 5. CRON TRIGGER SCHEDULER
+ * C5 fix: isRunning flags prevent cron overlap if previous run is still active.
+ * -----------------------------------------------------------------------------
+ */
+
+let isUptimeRunning = false;
+let isDailyRunning = false;
+let isFormRunning = false;
+
 // Cron 1: Uptime Check (Runs every 5 minutes)
 cron.schedule('*/5 * * * *', async () => {
+  if (isUptimeRunning) {
+    console.warn('[Cron] Uptime check already running, skipping this tick.');
+    return;
+  }
+  isUptimeRunning = true;
   console.log('[Cron Trigger] Uptime checks running...');
-  await runUptimeChecks();
+  try {
+    await runUptimeChecks();
+  } catch (err) {
+    console.error('[Cron] Uptime check cron error:', err);
+  } finally {
+    isUptimeRunning = false;
+  }
 });
 
 // Cron 2: Daily checks (SSL, Domain, Pixels) - Runs daily at 00:00
 cron.schedule('0 0 * * *', async () => {
+  if (isDailyRunning) {
+    console.warn('[Cron] Daily checks already running, skipping this tick.');
+    return;
+  }
+  isDailyRunning = true;
   console.log('[Cron Trigger] Daily SSL, Domain & Pixel checks running...');
-  await runDailyChecks();
+  try {
+    await runDailyChecks();
+  } catch (err) {
+    console.error('[Cron] Daily check cron error:', err);
+  } finally {
+    isDailyRunning = false;
+  }
 });
 
 // Cron 3: Form check submissions - Runs every 12 hours (08:00 and 20:00)
 cron.schedule('0 */12 * * *', async () => {
+  if (isFormRunning) {
+    console.warn('[Cron] Form checks already running, skipping this tick.');
+    return;
+  }
+  isFormRunning = true;
   console.log('[Cron Trigger] 12-hour Form submission checks running...');
-  await runFormChecks();
+  try {
+    await runFormChecks();
+  } catch (err) {
+    console.error('[Cron] Form check cron error:', err);
+  } finally {
+    isFormRunning = false;
+  }
 });
 
 // Cron 4: Escalation Check (Runs every hour)
@@ -828,6 +907,8 @@ cron.schedule('0 * * * *', async () => {
         isNull(incidents.resolvedAt),
         sql`${incidents.createdAt} < ${twelveHoursAgo}`
       ),
+      // C2 fix: Added limit to prevent unbounded query
+      limit: 100,
     });
 
     console.log(`[Escalation] Found ${staleIncidents.length} active incidents older than 12 hours.`);

@@ -4,6 +4,33 @@ import { db } from '@/lib/db';
 import { getOrCreateOrg } from '@/lib/db/org-helper';
 import { sites } from '@/lib/db';
 import { eq, and } from 'drizzle-orm';
+import { z } from 'zod';
+
+// M12 fix: Zod schema for PATCH body
+const patchSiteSchema = z.object({
+  name: z.string().min(1).max(200).trim().optional(),
+  url: z.string().min(1).max(2048).trim().optional(),
+  clientName: z.string().max(200).trim().nullable().optional(),
+  isActive: z.boolean().optional(),  // L10 fix: enforce boolean type
+});
+
+// L7 fix: UUID validation
+const uuidSchema = z.string().uuid('Invalid site ID format');
+
+// L9 fix: Block SSRF-prone internal addresses
+const BLOCKED_URL_PATTERNS = [
+  /^https?:\/\/localhost/i,
+  /^https?:\/\/127\./,
+  /^https?:\/\/10\./,
+  /^https?:\/\/192\.168\./,
+  /^https?:\/\/172\.(1[6-9]|2\d|3[01])\./,
+  /^https?:\/\/0\.0\.0\.0/,
+  /^https?:\/\/::1/,
+];
+
+function isBlockedUrl(url: string): boolean {
+  return BLOCKED_URL_PATTERNS.some((pattern) => pattern.test(url));
+}
 
 /**
  * PATCH handler to update site configurations (name, url, clientName, isActive).
@@ -25,9 +52,46 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = await params;
-    const body = await req.json();
-    const { name, url, clientName, isActive } = body;
+    const { id: rawId } = await params;
+
+    // L7 fix: Validate UUID format
+    const idParsed = uuidSchema.safeParse(rawId);
+    if (!idParsed.success) {
+      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    }
+    const id = idParsed.data;
+
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+
+    // M12 fix: Validate body with zod
+    const parsed = patchSiteSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const { name, url, clientName, isActive } = parsed.data;
+
+    // L9 fix: Block SSRF if URL is being updated
+    if (url) {
+      let formattedCheckUrl = url;
+      if (!/^https?:\/\//i.test(formattedCheckUrl)) {
+        formattedCheckUrl = `https://${formattedCheckUrl}`;
+      }
+      if (isBlockedUrl(formattedCheckUrl)) {
+        return NextResponse.json(
+          { error: 'URL points to a private or reserved address and cannot be monitored.' },
+          { status: 400 }
+        );
+      }
+    }
 
     const billingEntityId = orgId || userId;
     const org = await getOrCreateOrg(billingEntityId);
@@ -87,7 +151,15 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = await params;
+    const { id: rawId } = await params;
+
+    // L7 fix: Validate UUID format
+    const idParsed = uuidSchema.safeParse(rawId);
+    if (!idParsed.success) {
+      return NextResponse.json({ error: 'Invalid site ID' }, { status: 400 });
+    }
+    const id = idParsed.data;
+
     const billingEntityId = orgId || userId;
     const org = await getOrCreateOrg(billingEntityId);
 

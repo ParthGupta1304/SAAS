@@ -2,9 +2,12 @@
  * Database schema definitions for Maintly using Drizzle ORM.
  * Defines pgEnums, tables (organizations, sites, checks, check_results, incidents, reports, alert_settings),
  * and their associated relational definitions.
+ *
+ * C1 fix: Added indexes on all high-traffic foreign key and filter columns.
+ * H8 fix: Added unique constraints on reports(site_id, month, year) and checks(site_id, type).
  */
 
-import { pgTable, uuid, text, integer, timestamp, boolean, jsonb, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, timestamp, boolean, jsonb, pgEnum, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // Enums
@@ -58,7 +61,10 @@ export const sites = pgTable('sites', {
   clientName: text('client_name'),
   isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  // C1 fix: index on org_id — every API route queries sites by orgId
+  index('sites_org_id_idx').on(table.orgId),
+]);
 
 /**
  * Checks config table specifying which monitoring checks (uptime, ssl, domain, form, tracking)
@@ -73,7 +79,14 @@ export const checks = pgTable('checks', {
   lastCheckedAt: timestamp('last_checked_at'),
   config: jsonb('config').default({}).notNull(), // e.g. { formUrl: string, fields: [{ name, value }], expectedText: string, pixels: string[] }
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  // C1 fix: index on site_id — worker joins checks to sites constantly
+  index('checks_site_id_idx').on(table.siteId),
+  // C1 fix: composite index on type + is_active — worker filters by these every cron run
+  index('checks_type_active_idx').on(table.type, table.isActive),
+  // H8 fix: unique constraint prevents duplicate check types per site
+  uniqueIndex('checks_site_type_unique_idx').on(table.siteId, table.type),
+]);
 
 /**
  * Historical results of monitoring checks.
@@ -86,7 +99,10 @@ export const checkResults = pgTable('check_results', {
   details: text('details'),
   screenshotUrl: text('screenshot_url'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  // C1 fix: composite index on check_id + created_at — dashboard + reports query by check + date range
+  index('check_results_check_id_created_at_idx').on(table.checkId, table.createdAt),
+]);
 
 /**
  * Open or resolved incident logs representing downtime or validation failures.
@@ -100,7 +116,12 @@ export const incidents = pgTable('incidents', {
   resolvedAt: timestamp('resolved_at'),
   isRead: boolean('is_read').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  // C1 fix: composite index — worker's findOpenIncidentForCheck() filters by siteId + resolvedAt
+  index('incidents_site_id_resolved_at_idx').on(table.siteId, table.resolvedAt),
+  // C1 fix: index on created_at — escalation cron filters by createdAt < 12h ago
+  index('incidents_created_at_idx').on(table.createdAt),
+]);
 
 /**
  * Client reports table holding monthly summary records, generated PDFs, and AI-generated text.
@@ -114,7 +135,12 @@ export const reports = pgTable('reports', {
   pdfUrl: text('pdf_url'),
   aiSummary: text('ai_summary'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  // C1 fix: index on site_id — reports page queries by siteId
+  index('reports_site_id_idx').on(table.siteId),
+  // H8 fix: unique constraint prevents duplicate reports for same site/month/year
+  uniqueIndex('reports_site_month_year_unique_idx').on(table.siteId, table.month, table.year),
+]);
 
 /**
  * Alert settings configurations for Slack webhooks, email lists, or SMS routing.
@@ -125,7 +151,10 @@ export const alertSettings = pgTable('alert_settings', {
   channel: text('channel').notNull(), // 'email', 'slack', 'sms'
   config: jsonb('config').default({}).notNull(), // e.g. { webhookUrl: string, email: string, phone: string }
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  // C1 fix: index on org_id — queried on every alert dispatch
+  index('alert_settings_org_id_idx').on(table.orgId),
+]);
 
 // Relations for easier query building
 export const organizationsRelations = relations(organizations, ({ many }) => ({

@@ -108,9 +108,11 @@ export default async function DashboardPage() {
   const checkIds = orgSites.flatMap((s) => s.checks.map((c) => c.id));
   let checksPassingPercentage = '100.0%';
   if (checkIds.length > 0) {
+    // C2 fix: Added limit to prevent unbounded query OOM on large datasets
     const results = await db.query.checkResults.findMany({
       where: inArray(checkResults.checkId, checkIds),
       orderBy: [desc(checkResults.createdAt)],
+      limit: 500,
     });
 
     const latestResults = new Map<string, string>();
@@ -129,28 +131,58 @@ export default async function DashboardPage() {
     }
   }
 
-  // Calculate per-site real uptime % from last 30 days of uptime check results
+  // C3 fix: Single bulk query for uptime % instead of N+1 per-site loop
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const siteUptimeMap = new Map<string, string>();
+  const uptimeCheckIds = orgSites
+    .map((site) => site.checks.find((c) => c.type === 'uptime')?.id)
+    .filter((id): id is string => !!id);
+
+  const uptimeCheckMap = new Map<string, string>(); // checkId -> siteId
   for (const site of orgSites) {
     const uptimeCheck = site.checks.find((c) => c.type === 'uptime');
-    if (!uptimeCheck) {
-      siteUptimeMap.set(site.id, 'N/A');
-      continue;
+    if (uptimeCheck) {
+      uptimeCheckMap.set(uptimeCheck.id, site.id);
     }
-    const uptimeResults = await db.query.checkResults.findMany({
+  }
+
+  const siteUptimeMap = new Map<string, string>();
+
+  // Initialize N/A for sites with no uptime check
+  for (const site of orgSites) {
+    if (!site.checks.find((c) => c.type === 'uptime')) {
+      siteUptimeMap.set(site.id, 'N/A');
+    }
+  }
+
+  if (uptimeCheckIds.length > 0) {
+    // Single query to fetch all uptime results for the last 30 days across all sites
+    const allUptimeResults = await db.query.checkResults.findMany({
       where: and(
-        eq(checkResults.checkId, uptimeCheck.id),
+        inArray(checkResults.checkId, uptimeCheckIds),
         sql`${checkResults.createdAt} >= ${thirtyDaysAgo}`
       ),
+      limit: 5000, // Safety cap
     });
-    if (uptimeResults.length === 0) {
-      siteUptimeMap.set(site.id, '—');
-    } else {
-      const passing = uptimeResults.filter((r) => r.status === 'passing').length;
-      siteUptimeMap.set(site.id, `${((passing / uptimeResults.length) * 100).toFixed(2)}%`);
+
+    // Group results by checkId in memory
+    const resultsByCheckId = new Map<string, typeof allUptimeResults>();
+    for (const result of allUptimeResults) {
+      const existing = resultsByCheckId.get(result.checkId) ?? [];
+      existing.push(result);
+      resultsByCheckId.set(result.checkId, existing);
+    }
+
+    // Compute uptime % for each check
+    for (const [checkId, siteId] of uptimeCheckMap.entries()) {
+      const uptimeResults = resultsByCheckId.get(checkId) ?? [];
+      if (uptimeResults.length === 0) {
+        siteUptimeMap.set(siteId, '—');
+      } else {
+        const passing = uptimeResults.filter((r) => r.status === 'passing').length;
+        siteUptimeMap.set(siteId, `${((passing / uptimeResults.length) * 100).toFixed(2)}%`);
+      }
     }
   }
 
