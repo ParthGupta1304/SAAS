@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cron from 'node-cron';
 import { createClient } from '@supabase/supabase-js';
@@ -12,10 +13,6 @@ import { checkDomain } from '../lib/monitoring/domain';
 import { checkPixels } from '../lib/monitoring/pixels';
 import { triggerAlertForIncident } from '../lib/alerts/alert-router';
 import { analyzeFormHtml } from '../lib/ai/gemini';
-
-// Load Env variables in case process isn't running via next dev
-import dotenv from 'dotenv';
-dotenv.config();
 
 const app = express();
 app.use(express.json());

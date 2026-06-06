@@ -51,17 +51,26 @@ export function OnboardingWizard({ org }: { org: OrgDetails }) {
       }
 
       // 2. Setup alerts
-      if (emailAlerts || slackWebhookUrl) {
+      if (emailAlerts) {
         await fetch('/api/settings/alerts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            channels: [
-              ...(emailAlerts ? [{ type: 'email', config: { email: userEmail } }] : []),
-              ...(slackWebhookUrl ? [{ type: 'slack', config: { webhookUrl: slackWebhookUrl } }] : []),
-            ],
+            channel: 'email',
+            config: { email: userEmail },
           }),
-        }).catch((err) => console.error('Silent alerts setup error:', err));
+        }).catch((err) => console.error('Silent email alert setup error:', err));
+      }
+
+      if (slackWebhookUrl) {
+        await fetch('/api/settings/alerts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            channel: 'slack',
+            config: { webhookUrl: slackWebhookUrl },
+          }),
+        }).catch((err) => console.error('Silent slack alert setup error:', err));
       }
 
       // Move to billing step
