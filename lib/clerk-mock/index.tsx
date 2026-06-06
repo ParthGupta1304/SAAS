@@ -82,3 +82,7 @@ export function useAuth() {
     orgId: 'mock_org_123',
   };
 }
+
+export function Show({ when, children }: { when: any; children: React.ReactNode }) {
+  return when ? <>{children}</> : null;
+}
